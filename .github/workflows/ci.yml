@@ -1,0 +1,70 @@
+name: CI
+
+# WHEN does this run?
+on:
+  pull_request: # every PR targeting these branches
+    branches: [main, develop]
+  push: # and on direct pushes to them (e.g. after a merge)
+    branches: [main, develop]
+
+# Cancel an in-progress run if you push again to the same PR/branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------
+  # JOB 1: Frontend — install + build
+  # ---------------------------------------------------------------------
+  frontend:
+    name: Frontend (install + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend # every `run` step starts here
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc # single source of truth for Node version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7
+
+  # ---------------------------------------------------------------------
+  # JOB 2: Backend — install check (runs IN PARALLEL with frontend)
+  # ---------------------------------------------------------------------
+  backend:
+    name: Backend (install check)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
