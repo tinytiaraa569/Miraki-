@@ -1,0 +1,159 @@
+{
+  "canvasId": "miraki-oman",
+  "version": 1,
+  "theme": { "palette": "ivory-rose", "fontDisplay": "serif" },
+  "sections": [
+    {
+      "type": "announcement",
+      "props": { "show": true, "text": "Now delivering across Oman — free shipping on orders above OMR 200" }
+    },
+    {
+      "type": "header",
+      "props": {
+        "brand": "MIRAKI",
+        "tagline": "MIRACULOUS · RARE · KINDRED",
+        "nav": [
+          { "label": "Engagement Rings", "href": "#engagement" },
+          { "label": "Jewelry", "href": "#jewelry" },
+          { "label": "Bespoke", "href": "#bespoke" }
+        ],
+        "navRight": [
+          { "label": "Our Journal", "href": "#journal" },
+          { "label": "Our Roots", "href": "#roots" }
+        ],
+        "showCountrySwitcher": true
+      }
+    },
+    {
+      "type": "hero",
+      "props": {
+        "headline": "Elegance with Purpose",
+        "ctas": [
+          { "label": "Shop Engagement Rings", "href": "#engagement" },
+          { "label": "Shop Jewelry", "href": "#jewelry" }
+        ],
+        "image": "",
+        "imageAlt": "Model wearing diamond bracelets and rings against a mauve backdrop"
+      }
+    },
+    {
+      "type": "categoryTiles",
+      "props": {
+        "title": "Choose Your Aesthetic",
+        "sub": "From classic to modern and all the beauty that shines in between",
+        "cta": { "label": "Explore Our Collection", "href": "#jewelry" },
+        "items": [
+          { "name": "Rings", "image": "/storefront/cat-rings.png", "href": "#rings" },
+          { "name": "Earrings", "image": "/storefront/cat-earrings.png", "href": "#earrings" },
+          { "name": "Bracelets", "image": "/storefront/cat-bracelets.png", "href": "#bracelets" },
+          { "name": "Necklaces", "image": "/storefront/cat-necklaces.png", "href": "#necklaces" }
+        ]
+      }
+    },
+    {
+      "type": "storyBand",
+      "props": {
+        "title": "Your Perfect Match",
+        "cards": [
+          {
+            "title": "Find The One",
+            "sub": "A ring as rare as your story — begin the search for forever",
+            "image": "/storefront/band-engagement.png",
+            "cta": { "label": "Explore Engagement", "href": "#engagement" }
+          },
+          {
+            "title": "A Style for Every Story",
+            "sub": "Jewelry is an expression of who you are — find yours",
+            "image": "/storefront/band-style.png",
+            "cta": { "label": "Your Style", "href": "#style" }
+          },
+          {
+            "title": "Elegance in Every Cut",
+            "sub": "Round, oval, pear and beyond — discover the shape that speaks to you",
+            "image": "/storefront/band-shape.png",
+            "cta": { "label": "Your Shape", "href": "#shape" }
+          }
+        ]
+      }
+    },
+    {
+      "type": "productCarousel",
+      "props": {
+        "title": "Timeless Meets Trendy",
+        "sub": "Unlimited possibilities, your perfect selection",
+        "tabs": ["Rings", "Earrings", "Bracelets", "Necklaces"],
+        "products": [
+          { "name": "Aurora Solitaire Ring", "price": 495, "compareAtPrice": 550, "image": "/storefront/prod-ring.png", "tag": "Bestseller" },
+          { "name": "Noor Diamond Studs", "price": 285, "compareAtPrice": null, "image": "/storefront/prod-studs.png", "tag": "New" },
+          { "name": "Soleil Tennis Bracelet", "price": 640, "compareAtPrice": 720, "image": "/storefront/prod-bracelet.png", "tag": null },
+          { "name": "Diana Pendant Necklace", "price": 320, "compareAtPrice": null, "image": "/storefront/prod-necklace.png", "tag": "Limited" }
+        ]
+      }
+    },
+    {
+      "type": "bannerDuo",
+      "props": {
+        "items": [
+          {
+            "title": "Bespoke, Made Real",
+            "sub": "Transforming your vision into a one-of-a-kind piece with real-time design",
+            "image": "/storefront/banner-bespoke.png",
+            "cta": { "label": "Start Your Bespoke Journey", "href": "#bespoke" }
+          },
+          {
+            "title": "From Our Journal",
+            "sub": "Stories of craft, kindred spirits and the moments that shine",
+            "image": "/storefront/banner-journal.png",
+            "cta": { "label": "Read Our Journal", "href": "#journal" }
+          }
+        ]
+      }
+    },
+    {
+      "type": "testimonials",
+      "props": {
+        "title": "Kindred Words",
+        "items": [
+          { "quote": "A flawless experience from Muscat — the ring arrived beautifully packaged and ahead of schedule.", "author": "Aisha R. — Muscat" },
+          { "quote": "The attention to detail on my eternity band is remarkable. Worth every rial.", "author": "Fatma S. — Salalah" },
+          { "quote": "Their team guided me through every step of the bespoke process. Truly kindred spirits.", "author": "Hamed B. — Sohar" }
+        ]
+      }
+    },
+    {
+      "type": "footer",
+      "props": {
+        "newsletterTitle": "Elevate your style with our insider updates!",
+        "newsletterCta": "Sign Up!",
+        "columns": [
+          {
+            "title": "Shop",
+            "links": [
+              { "label": "Engagement Rings", "href": "#engagement" },
+              { "label": "Jewelry", "href": "#jewelry" },
+              { "label": "Bespoke", "href": "#bespoke" },
+              { "label": "Collections", "href": "#collections" }
+            ]
+          },
+          {
+            "title": "About",
+            "links": [
+              { "label": "Our Roots", "href": "#roots" },
+              { "label": "Our Journal", "href": "#journal" },
+              { "label": "Contact Us", "href": "#contact" }
+            ]
+          },
+          {
+            "title": "Care",
+            "links": [
+              { "label": "Ring Size Guide", "href": "#size-guide" },
+              { "label": "Shipping & Returns", "href": "#shipping" },
+              { "label": "Terms & Conditions", "href": "#terms" }
+            ]
+          }
+        ],
+        "copyright": "© 2026 Miraki Jewels — Oman. All rights reserved."
+      }
+    }
+  ]
+}

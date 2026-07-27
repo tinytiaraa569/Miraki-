@@ -1,0 +1,189 @@
+{
+  "canvasId": "miraki-india",
+  "version": 1,
+  "theme": { "palette": "ivory-rose", "fontDisplay": "serif" },
+  "sections": [
+    {
+      "type": "announcement",
+      "props": { "show": false, "text": "Festive offer across India — complimentary shipping and free resizing on all rings" }
+    },
+    {
+      "type": "header",
+      "props": {
+        "brand": "MIRAKI",
+        "tagline": "MIRACULOUS · RARE · KINDRED",
+        "nav": [
+          { "label": "Engagement Rings", "href": "#engagement" },
+          { "label": "Jewelry", "href": "#jewelry" },
+          { "label": "Bespoke", "href": "#bespoke" }
+        ],
+        "navRight": [
+          { "label": "Our Journal", "href": "#journal" },
+          { "label": "Our Roots", "href": "#roots" }
+        ],
+        "showCountrySwitcher": true
+      }
+    },
+    {
+      "type": "hero",
+      "props": {
+        "headline": "Elegance with Purpose",
+        "ctas": [
+          { "label": "Shop Engagement Rings", "href": "#engagement" },
+          { "label": "Shop Jewelry", "href": "#jewelry" }
+        ],
+        "image": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/6811d83781277a49c106597e/miraki6550-banner-1920x750.jpg",
+        "imageAlt": "Model wearing diamond bracelets and rings against a mauve backdrop"
+      }
+    },
+    {
+      "type": "categoryTiles",
+      "props": {
+        "title": "Choose Your Aesthetic",
+        "sub": "From classic to modern and all the beauty that shines in between",
+        "cta": { "label": "Explore Our Collection", "href": "#jewelry" },
+        "items": [
+          { "name": "Rings", "image": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/6891da67424afa53db5da369/423826-100-round-diamond-marq395-yellow-gold-1-800x1200.jpg","hoverImage": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/6891da66424afa53db5da365/6c9f9747-7957-4f0f-86a7-d85bef7cdce8-800x1200.jpg" , "href": "#rings" },
+          { "name": "Earrings", "image": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/6891da6e5b15d4deece87436/422745-100-round-diamond-marq395-yellow-gold-1-800x1200.jpg","hoverImage": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/6891da6e5b15d4deece87433/422745-100-round-diamond-marq395-yellow-gold-2-800x1200.jpg" , "href": "#earrings" },
+          { "name": "Bracelets", "image": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/6891d7237d458b2564a701e0/403116-150-round-diamond-round_1-yellow-gold-1-800x1200.jpg","hoverImage": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/6891d7227d458b2564a701dc/img_m314-800x1200.jpg" , "href": "#bracelets" },
+          { "name": "Necklaces", "image": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/6731b2b735a3aa003637f084/413886-150-round-diamond-round_1-yellow-gold-1-800x1200.jpg","hoverImage": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/6731b2b735a3aa003637f07f/413886-100-round-diamond-round_1-yellow-gold-2-800x1200.jpg" , "href": "#necklaces" }
+        ]
+      }
+    },
+    {
+      "type": "storyBand",
+      "props": {
+        "title": "Your Perfect Match",
+        "eyebrow": "Find The One",
+        "cards": [
+          {
+            "title": "Find The One",
+            "sub": "With an exquisite array of shapes, including round, princess, emerald, and more, giving you endless options to create a piece that's truly your own.\n\nEach cut is carefully crafted to reflect light beautifully, making your jewelry not just an accessory, but a statement of elegance and purpose.",
+            "image": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/66f4f578727c970152b23961/miraki5484-800x1200.jpg",
+            "cta": {
+              "label": "Your Shape",
+              "href": "#shape"
+            }
+          },
+          {
+            "title": "A Style for Every Story",
+           "sub": "Jewelry is an expression of who you are.\n\nOur collection is thoughtfully designed to capture your individuality, offering a range of styles that speak to every taste.\n\nFrom classics to contemporary trends, find the piece that complements your story and reflects your personal style.",
+            "image": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/66f4f5b159de4507314ab3f1/miraki6021-800x1200.jpg",
+            "cta": {
+              "label": "Your Style",
+              "href": "#style"
+            }
+          }
+          
+        ]
+      }
+    },
+    {
+      "type": "productCarousel",
+      "props": {
+        "title": "Timeless Meets Trendy",
+        "sub": "Unlimited possibilities, your perfect selection",
+        "tabs": ["Rings", "Earrings", "Bracelets", "Necklaces"],
+        "products": [
+          { "name": "Aurora Solitaire Ring", 
+          "price": 110000, "compareAtPrice": 125000, 
+          "image": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/66f4f642727c970152b2627e/miraki5290-800x1200.jpg",
+           "tag": "Bestseller",
+           "mainImg": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/66f4f642727c970152b2627e/miraki5290-800x1200.jpg",
+          "hoveredImg": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/66f4f642727c970152b2627e/miraki5290-800x1200.jpg",
+          "category": "Rings"
+          },
+          { "name": "Noor Diamond Studs",
+           "price": 64000, "compareAtPrice": null,
+            "image": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/66f4f68d5f345100d8b7aaed/miraki6682-bandw-800x1200.jpg",
+             "tag": "New" ,
+            "mainImg": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/66f4f68d5f345100d8b7aaed/miraki6682-bandw-800x1200.jpg",
+          "hoveredImg": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/66f4f6954c496d01b42cef5d/miraki6682-800x1200.jpg",
+          "category": "Earrings"
+            },
+          { "name": "Soleil Tennis Bracelet",
+           "price": 145000, "compareAtPrice": 162000,
+            "image": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/66f4f6e9c85d500171a1de7a/miraki6423-bandw-800x1200.jpg",
+             "tag": null ,
+              "mainImg": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/66f4f6e9c85d500171a1de7a/miraki6423-bandw-800x1200.jpg",
+          "hoveredImg": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/66f4f6f4655d09070068754e/miraki6423-800x1200.jpg",
+            "category": "Bracelets"
+            },
+          { "name": "Diana Pendant Necklace", 
+          "price": 72000, "compareAtPrice":
+           null, "image": "/storefront/prod-necklace.png", 
+           "tag": "Limited",
+           "mainImg": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/66f4f743b854270184f740dc/miraki5871-bandw-800x1200.jpg",
+          "hoveredImg": "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/66f4f74a11620e01396d546f/miraki5871-800x1200.jpg",
+            "category": "Necklaces"
+           }
+        ]
+      }
+    },
+    {
+      "type": "bannerDuo",
+      "props": {
+        "items": [
+          {
+            "title": "Bespoke, Made Real",
+            "sub": "Transforming your vision into a one-of-a-kind piece with real-time design",
+            "image": "/storefront/banner-bespoke.png",
+            "cta": { "label": "Start Your Bespoke Journey", "href": "#bespoke" }
+          },
+          {
+            "title": "From Our Journal",
+            "sub": "Stories of craft, kindred spirits and the moments that shine",
+            "image": "/storefront/banner-journal.png",
+            "cta": { "label": "Read Our Journal", "href": "#journal" }
+          }
+        ]
+      }
+    },
+    {
+      "type": "testimonials",
+      "props": {
+        "title": "Kindred Words",
+        "items": [
+          { "quote": "My engagement ring is everything I dreamed of — the craftsmanship rivals anything I saw in Mumbai.", "author": "Priya N. — Mumbai" },
+          { "quote": "Beautiful packaging, quick delivery, and the diamond studs sparkle endlessly.", "author": "Ananya D. — Bengaluru" },
+          { "quote": "The bespoke team turned my grandmother's design into a modern heirloom. Unforgettable.", "author": "Rohan G. — New Delhi" }
+        ]
+      }
+    },
+    {
+      "type": "footer",
+      "props": {
+        "newsletterTitle": "Elevate your style with our insider updates!",
+        "newsletterCta": "Sign Up!",
+        "columns": [
+          {
+            "title": "Shop",
+            "links": [
+              { "label": "Engagement Rings", "href": "#engagement" },
+              { "label": "Jewelry", "href": "#jewelry" },
+              { "label": "Bespoke", "href": "#bespoke" },
+              { "label": "Collections", "href": "#collections" }
+            ]
+          },
+          {
+            "title": "About",
+            "links": [
+              { "label": "Our Roots", "href": "#roots" },
+              { "label": "Our Journal", "href": "#journal" },
+              { "label": "Contact Us", "href": "#contact" }
+            ]
+          },
+          {
+            "title": "Care",
+            "links": [
+              { "label": "Ring Size Guide", "href": "#size-guide" },
+              { "label": "Shipping & Returns", "href": "#shipping" },
+              { "label": "Terms & Conditions", "href": "#terms" }
+            ]
+          }
+        ],
+        "copyright": "© 2026 Miraki Jewels — India. All rights reserved."
+      }
+    }
+  ]
+}
