@@ -55,6 +55,7 @@ import {
   CreditCard,
   Sliders,
   Briefcase,
+  Braces,
 } from "lucide-react"
 
 export const SELLER_NAV = [
@@ -184,6 +185,7 @@ export const SELLER_NAV = [
     items: [
       { title: "Dashboard Appearance", url: "/hub/advanced/appearance", icon: LayoutDashboard },
       { title: "Business Mode", url: "/hub/advanced/business-mode", icon: Briefcase },
+      { title: "Metafields", url: "/hub/advanced/metafields", icon: Braces },
     ],
   },
 ]

@@ -9,7 +9,7 @@ import { SellerSidebar } from "@/components/hub/seller-sidebar"
 import { NavSubmenuOverlay } from "@/components/hub/nav-submenu-overlay"
 import { HubHeader } from "@/components/hub/hub-header"
 import { fetcher } from "@/lib/api"
-import { isPathActive } from "@/lib/seller-nav"
+import { findNavMatch } from "@/lib/seller-nav"
 import { useSellerTheme } from "@/hooks/use-seller-theme"
 
 // ---------------------------------------------------------------------------
@@ -82,8 +82,11 @@ function PageLoader() {
  * module's code is only downloaded when it's first visited.
  */
 export function HubLayout() {
-  const [submenuParent, setSubmenuParent] = useState(null)
   const { pathname } = useLocation()
+  // Open the group that owns the current route on the FIRST render, so a hard
+  // refresh or deep link (e.g. /hub/products/collections) restores the second
+  // sidebar instead of showing only the primary one.
+  const [submenuParent, setSubmenuParent] = useState(() => findNavMatch(pathname)?.parent ?? null)
 
   // Micro-payload: business name + logos + colors only (aggregation $project
   // server-side). Cached by SWR, so the theme applies instantly on revisits.
@@ -120,15 +123,14 @@ export function HubLayout() {
 
   const closeSubmenu = useCallback(() => setSubmenuParent(null), [])
 
-  // Safety net: close the slide-out submenu when navigating OUTSIDE the open
-  // group (back/forward, deep links, header links). Navigating to one of the
-  // group's own children keeps the panel open with the new link highlighted.
+  // Keep the slide-out submenu in sync with the route. Navigating INTO a group
+  // (deep link, back/forward, header/breadcrumb links) opens that group;
+  // navigating to a top-level page closes it. This only runs on pathname
+  // changes, so manually closing the panel while staying on the same page
+  // leaves it closed until you navigate again.
   useEffect(() => {
-    setSubmenuParent((prev) => {
-      if (!prev) return null
-      const stillInGroup = prev.items?.some((c) => isPathActive(pathname, c.url))
-      return stillInGroup ? prev : null
-    })
+    const parent = findNavMatch(pathname)?.parent ?? null
+    setSubmenuParent((prev) => (prev && parent && prev.title === parent.title ? prev : parent))
   }, [pathname])
 
   return (

@@ -1,8 +1,17 @@
 import mongoose from "mongoose"
+import { brandSchema } from "../modules/brands/brand.model.js"
+import { categorySchema } from "../modules/categories/category.model.js"
+import { collectionSchema } from "../modules/collections/collection.model.js"
+import { collectionMemberSchema } from "../modules/collections/collectionMember.model.js"
+import { optionSetSchema } from "../modules/optionsets/optionSet.model.js"
+import { productSchema } from "../modules/products/product.model.js"
+import { productVariantSchema } from "../modules/productvariants/productVariant.model.js"
 import { storeSchema } from "../modules/stores/store.model.js"
 import { storeVariantSchema } from "../modules/storevariants/storevariant.model.js"
 import { substoreSchema } from "../modules/substores/substore.model.js"
 import { storeUserSchema } from "../modules/users/storeUser.model.js"
+import { metafieldDefinitionSchema } from "../modules/metafields/metafield.model.js"
+import { metafieldValueSchema } from "../modules/metafields/metafieldValue.model.js"
 
 // -----------------------------------------------------------------------------
 // DATABASE-PER-TENANT MULTI-TENANCY
@@ -59,6 +68,21 @@ export function getTenantModels(dbName) {
     StoreUser: conn.models.StoreUser || conn.model("StoreUser", storeUserSchema, "storeUsers"),
     Substore: conn.models.Substore || conn.model("Substore", substoreSchema, "substores"),
     StoreVariant: conn.models.StoreVariant || conn.model("StoreVariant", storeVariantSchema, "storevariants"),
+    Category: conn.models.Category || conn.model("Category", categorySchema, "categories"),
+    Brand: conn.models.Brand || conn.model("Brand", brandSchema, "brands"),
+    Collection: conn.models.Collection || conn.model("Collection", collectionSchema, "collections"),
+    CollectionMember:
+      conn.models.CollectionMember ||
+      conn.model("CollectionMember", collectionMemberSchema, "collectionMembers"),
+    OptionSet: conn.models.OptionSet || conn.model("OptionSet", optionSetSchema, "optionSets"),
+    MetafieldDefinition:
+      conn.models.MetafieldDefinition ||
+      conn.model("MetafieldDefinition", metafieldDefinitionSchema, "metafieldDefinitions"),
+    MetafieldValue:
+      conn.models.MetafieldValue || conn.model("MetafieldValue", metafieldValueSchema, "metafieldValues"),
+    Product: conn.models.Product || conn.model("Product", productSchema, "products"),
+    ProductVariant:
+      conn.models.ProductVariant || conn.model("ProductVariant", productVariantSchema, "productVariants"),
   }
 
   modelCache.set(dbName, models)

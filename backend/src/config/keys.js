@@ -3,8 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
-// RS256 keypair for JWT signing. In production, mount real keys at server/.keys/
-// (never committed). In dev, a keypair is generated once and reused.
+
 const keysDir = join(dirname(fileURLToPath(import.meta.url)), "../../.keys")
 const privPath = join(keysDir, "jwt_rs256.key")
 const pubPath = join(keysDir, "jwt_rs256.key.pub")

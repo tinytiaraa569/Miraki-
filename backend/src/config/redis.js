@@ -1,8 +1,7 @@
 import Redis from "ioredis"
 import { env } from "./env.js"
 
-// Redis is OPTIONAL: if REDIS_URL is not set (or Redis goes down),
-// every cache call becomes a no-op and the API keeps working from MongoDB.
+
 let redis = null
 let redisHealthy = false
 
@@ -35,7 +34,6 @@ export function isRedisReady() {
   return Boolean(redis) && redisHealthy
 }
 
-/** Get a cached JSON value. Returns null on miss or any Redis failure. */
 export async function cacheGet(key) {
   if (!isRedisReady()) return null
   try {
@@ -46,7 +44,6 @@ export async function cacheGet(key) {
   }
 }
 
-/** Set a JSON value with a TTL (seconds). Silently no-ops on failure. */
 export async function cacheSet(key, value, ttlSeconds = env.CACHE_TTL_SECONDS) {
   if (!isRedisReady()) return
   try {
@@ -56,7 +53,6 @@ export async function cacheSet(key, value, ttlSeconds = env.CACHE_TTL_SECONDS) {
   }
 }
 
-/** Delete all keys matching a prefix (e.g. "cache:platform:sellers:*"). */
 export async function cacheInvalidate(prefix) {
   if (!isRedisReady()) return
   try {

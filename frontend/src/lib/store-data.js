@@ -181,3 +181,31 @@ export const SUBSTORE_STATUSES = [
   { value: "inactive", label: "Inactive" },
   { value: "coming_soon", label: "Coming Soon" },
 ]
+
+// -------------------------------------------------------------- categories
+export const CATEGORY_STATUSES = [
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+]
+
+// How products inside a category are ordered by default on the storefront.
+export const CATEGORY_SORT_ORDERS = [
+  { value: "manual", label: "Manual" },
+  { value: "name_asc", label: "Name (A–Z)" },
+  { value: "name_desc", label: "Name (Z–A)" },
+  { value: "newest", label: "Newest first" },
+  { value: "oldest", label: "Oldest first" },
+  { value: "price_asc", label: "Price (low → high)" },
+  { value: "price_desc", label: "Price (high → low)" },
+]
+
+// Sitemap change-frequency hints for search engines.
+export const SITEMAP_FREQUENCIES = [
+  { value: "always", label: "Always" },
+  { value: "hourly", label: "Hourly" },
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "yearly", label: "Yearly" },
+  { value: "never", label: "Never" },
+]

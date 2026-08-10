@@ -4,8 +4,7 @@ import { Seller } from "../modules/sellers/seller.model.js"
 import { ApiError } from "../utils/apiError.js"
 import { asyncHandler } from "../utils/asyncHandler.js"
 
-// Role, scope, and status are ALWAYS re-resolved fresh from the DB.
-// Nothing in the token or request body is trusted for authority.
+
 export const loadUser = asyncHandler(async (req, _res, next) => {
   const { userId, userType, sellerId } = req.auth
 
@@ -13,12 +12,10 @@ export const loadUser = asyncHandler(async (req, _res, next) => {
   if (userType === "platform") {
     user = await PlatformUser.findById(userId)
   } else {
-    // Store users live inside their seller's DEDICATED DATABASE.
-    // sellerId comes from the server-side session record (authenticate.js).
+    
     if (!sellerId) throw new ApiError(403, "Forbidden")
 
     const seller = await Seller.findById(sellerId).lean()
-    // Suspended or trashed seller → the whole tenant is locked out mid-session.
     if (!seller || seller.status !== "active" || seller.deletedAt) {
       throw new ApiError(403, "Forbidden")
     }

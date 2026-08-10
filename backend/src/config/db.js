@@ -7,8 +7,7 @@ export async function connectDB() {
   let uri = env.MONGODB_URI
 
   if (!uri) {
-    // Dev fallback: in-memory replica set (transactions supported).
-    // Set MONGODB_URI (e.g. Atlas) to use a real database — no code changes needed.
+    
     const { MongoMemoryReplSet } = await import("mongodb-memory-server")
     memoryServer = await MongoMemoryReplSet.create({ replSet: { count: 1 } })
     uri = memoryServer.getUri()

@@ -21,25 +21,25 @@
         "nav": [
           {
             "label": "Engagement Rings",
-            "href": "#engagement"
+            "href": "/engagement"
           },
           {
             "label": "Jewelry",
-            "href": "#jewelry"
+            "href": "/jewelry"
           },
           {
             "label": "Bespoke",
-            "href": "#bespoke"
+            "href": "/bespoke"
           }
         ],
         "navRight": [
           {
             "label": "Our Journal",
-            "href": "#journal"
+            "href": "/journal"
           },
           {
             "label": "Our Roots",
-            "href": "#roots"
+            "href": "/roots"
           }
         ],
         "showCountrySwitcher": true
@@ -52,11 +52,11 @@
         "ctas": [
           {
             "label": "Shop Engagement Rings",
-            "href": "#engagement"
+            "href": "/engagement"
           },
           {
             "label": "Shop Jewelry",
-            "href": "#jewelry"
+            "href": "/jewelry"
           }
         ],
         "image": "/storefront/hero.png",
