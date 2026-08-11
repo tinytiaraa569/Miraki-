@@ -19,6 +19,11 @@ const AUTH_PATHS = [
   "/auth/logout",
   "/seller/me",
   "/seller/auth/login",
+  "/seller/store-admin/auth/login",
+  "/seller/store-admin/auth/me",
+  "/seller/store-admin/auth/2fa/setup",
+  "/seller/store-admin/auth/2fa/verify",
+  "/seller/store-admin/auth/logout"
 ]
 
 async function request(path, options = {}) {

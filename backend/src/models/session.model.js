@@ -4,7 +4,8 @@ const sessionSchema = new mongoose.Schema(
   {
     sessionId: { type: String, required: true, unique: true },
     userId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
-    userType: { type: String, enum: ["platform", "store"], required: true },
+    // userType: { type: String, enum: ["platform", "store"], required: true },
+    userType: { type: String, enum: ["platform", "store", "storeAdmin"], required: true },
     // Store users only: which tenant they belong to (null for platform users).
     // Lets loadUser resolve the right tenant DATABASE without trusting the client.
     sellerId: { type: mongoose.Schema.Types.ObjectId, default: null },

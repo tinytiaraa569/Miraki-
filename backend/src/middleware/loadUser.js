@@ -12,9 +12,7 @@ export const loadUser = asyncHandler(async (req, _res, next) => {
   let user
   if (userType === "platform") {
     user = await PlatformUser.findById(userId)
-  } else {
-    // Store users live inside their seller's DEDICATED DATABASE.
-    // sellerId comes from the server-side session record (authenticate.js).
+  } else if (userType === "store" || userType === "storeAdmin") {
     if (!sellerId) throw new ApiError(403, "Forbidden")
 
     const seller = await Seller.findById(sellerId).lean()
@@ -23,10 +21,15 @@ export const loadUser = asyncHandler(async (req, _res, next) => {
       throw new ApiError(403, "Forbidden")
     }
 
-    const { StoreUser } = getTenantModels(seller.dbName)
-    user = await StoreUser.findById(userId)
+    const { StoreUser, StoreAdmin } = getTenantModels(seller.dbName)
+    user = userType === "storeAdmin"
+      ? await StoreAdmin.findById(userId)
+      : await StoreUser.findById(userId)
+
     req.seller = seller
     req.tenantDbName = seller.dbName
+  } else {
+    throw new ApiError(403, "Forbidden")
   }
 
   if (!user || user.status !== "active") throw new ApiError(403, "Forbidden")

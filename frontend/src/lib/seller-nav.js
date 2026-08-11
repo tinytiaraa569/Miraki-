@@ -55,6 +55,9 @@ import {
   CreditCard,
   Sliders,
   Briefcase,
+  Key,
+  ShieldCheck,
+  UserPen,
 } from "lucide-react"
 
 export const SELLER_NAV = [
@@ -66,6 +69,9 @@ export const SELLER_NAV = [
       { title: "Main Store", url: "/hub/stores", icon: Store },
       { title: "Substores", url: "/hub/stores/substores", icon: Building2 },
       { title: "Store Variants", url: "/hub/stores/variants", icon: GitBranch },
+      { title: "Store Permissions", url: "/hub/stores/permissions", icon: Key },
+      { title: "Store Roles", url: "/hub/stores/roles", icon: ShieldCheck },
+      { title: "Store Admins", url: "/hub/stores/admins", icon: UserPen },
     ],
   },
   { title: "Team", url: "/hub/team", icon: Users },
