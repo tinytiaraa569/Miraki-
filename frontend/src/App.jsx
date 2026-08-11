@@ -11,6 +11,7 @@ import { HubLayout } from "@/pages/hub/hub-layout"
 import { useAuth } from "@/hooks/use-auth"
 import { useSellerAuth } from "@/hooks/use-seller-auth"
 import { Toaster } from "sonner"
+import { useStoreAdminAuth } from "./hooks/use-storeadmin-auth"
 
 
 const HubOverviewPage = lazy(() => import("@/pages/hub/overview-page"))
@@ -36,6 +37,9 @@ const HubTeamPage = lazy(() => import("@/pages/hub/team-page"))
 const HubProfilePage = lazy(() => import("@/pages/hub/profile-page"))
 const HubAppearancePage = lazy(() => import("@/pages/hub/appearance-page"))
 const HubModulePage = lazy(() => import("@/pages/hub/module-page"))
+const HubPermissionPage = lazy(()=> import("@/pages/hub/permissions-page"))
+const HubRolePage = lazy(()=> import("@/pages/hub/roles-page"))
+const HubStoreAdminPage = lazy(()=> import("@/pages/hub/store-admins-page"))
 
 const StorefrontPage = lazy(() => import("@/pages/storefront-page"))
 const JewelryPage = lazy(() => import("@/pages/jewelry-page"))
@@ -62,16 +66,34 @@ function ProtectedRoute({ children }) {
   return isAuthenticated ? children : <Navigate to="/platform/super-admin/login" replace />
 }
 
+// function SellerPublicOnlyRoute({ children }) {
+//   const { isAuthenticated, isLoading } = useSellerAuth()
+//   if (isLoading) return <FullScreenLoader />
+//   return isAuthenticated ? <Navigate to="/hub" replace /> : children
+// }
+
+// function SellerProtectedRoute({ children }) {
+//   const { isAuthenticated, isLoading } = useSellerAuth()
+//   if (isLoading) return <FullScreenLoader />
+//   return isAuthenticated ? children : <Navigate to="/seller/login" replace />
+// }
+
 function SellerPublicOnlyRoute({ children }) {
-  const { isAuthenticated, isLoading } = useSellerAuth()
-  if (isLoading) return <FullScreenLoader />
-  return isAuthenticated ? <Navigate to="/hub" replace /> : children
+  const seller = useSellerAuth()
+  const storeAdmin = useStoreAdminAuth()
+  if (seller.isLoading || storeAdmin.isLoading) return <FullScreenLoader />
+  return seller.isAuthenticated || storeAdmin.isAuthenticated
+    ? <Navigate to="/hub" replace />
+    : children
 }
 
 function SellerProtectedRoute({ children }) {
-  const { isAuthenticated, isLoading } = useSellerAuth()
-  if (isLoading) return <FullScreenLoader />
-  return isAuthenticated ? children : <Navigate to="/seller/login" replace />
+  const seller = useSellerAuth()
+  const storeAdmin = useStoreAdminAuth()
+  if (seller.isLoading || storeAdmin.isLoading) return <FullScreenLoader />
+  return seller.isAuthenticated || storeAdmin.isAuthenticated
+    ? children
+    : <Navigate to="/seller/login" replace />
 }
 
 
@@ -140,6 +162,9 @@ export default function App() {
         <Route path="products/collections" element={<HubCollectionsPage />} />
         <Route path="products/option-sets" element={<HubOptionSetsPage />} />
 
+        <Route path="stores/permissions" element={<HubPermissionPage />} />
+        <Route path="stores/roles" element={<HubRolePage />} />
+        <Route path="stores/admins" element={<HubStoreAdminPage />} />
         <Route path="team" element={<HubTeamPage />} />
         <Route path="profile" element={<HubProfilePage />} />
         <Route path="advanced/appearance" element={<HubAppearancePage />} />

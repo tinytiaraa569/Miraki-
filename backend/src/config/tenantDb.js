@@ -12,6 +12,9 @@ import { substoreSchema } from "../modules/substores/substore.model.js"
 import { storeUserSchema } from "../modules/users/storeUser.model.js"
 import { metafieldDefinitionSchema } from "../modules/metafields/metafield.model.js"
 import { metafieldValueSchema } from "../modules/metafields/metafieldValue.model.js"
+import { permissionSchema } from "../modules/permissions/permission.model.js"
+import { roleSchema } from "../modules/roles/role.model.js"
+import { storeAdminSchema } from "../modules/storeadmins/storeadmin.model.js"
 
 // -----------------------------------------------------------------------------
 // DATABASE-PER-TENANT MULTI-TENANCY
@@ -83,6 +86,9 @@ export function getTenantModels(dbName) {
     Product: conn.models.Product || conn.model("Product", productSchema, "products"),
     ProductVariant:
       conn.models.ProductVariant || conn.model("ProductVariant", productVariantSchema, "productVariants"),
+    Permission : conn.models.Permission || conn.model("Permission", permissionSchema, "permissions"),
+    Role : conn.models.Role || conn.model("Role", roleSchema, "roles"),
+    StoreAdmin : conn.models.StoreAdmin || conn.model("StoreAmin", storeAdminSchema, "storeadmins"),
   }
 
   modelCache.set(dbName, models)

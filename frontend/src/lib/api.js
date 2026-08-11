@@ -19,6 +19,11 @@ const NO_REFRESH_PATHS = [
   "/auth/logout",
   "/auth/refresh",
   "/seller/auth/login",
+  "/seller/store-admin/auth/login",
+  "/seller/store-admin/auth/me",
+  "/seller/store-admin/auth/2fa/setup",
+  "/seller/store-admin/auth/2fa/verify",
+  "/seller/store-admin/auth/logout"
 ]
 
 // Single-flight silent refresh. The 15-min access token expires constantly;
