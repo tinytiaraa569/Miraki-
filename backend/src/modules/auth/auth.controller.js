@@ -93,10 +93,6 @@ export const refresh = asyncHandler(async (req, res) => {
   res.json({ ok: true })
 })
 
-// Logout must NEVER fail. It is deliberately NOT behind the authenticate
-// middleware: even with an expired/invalid access token, the server-side
-// session must be revoked and cookies cleared. It kills the session found via
-// the access token AND the one found via the refresh token (best effort).
 export const logout = asyncHandler(async (req, res) => {
   // 1) Revoke the session referenced by the access token (if still decodable).
   const accessToken = req.cookies?.access_token
@@ -133,8 +129,7 @@ export const me = asyncHandler(async (req, res) => {
   })
 })
 
-// SETTINGS: change password. Verifies the current password, hashes the new one
-// with argon2id, and revokes every OTHER session so stolen sessions die.
+
 export const changePassword = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body
 

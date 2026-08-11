@@ -5,11 +5,12 @@ import {
   deleteSubstoreDoc,
   destroySubstoreDoc,
   getSubstore,
+  listSubstoreOptions,
   listSubstores,
   restoreSubstoreDoc,
   updateSubstoreDoc,
 } from "./substore.service.js"
-import { listSubstoresQuerySchema } from "./substore.validation.js"
+import { listSubstoreOptionsQuerySchema, listSubstoresQuerySchema } from "./substore.validation.js"
 
 const ctx = (req) => ({ seller: req.seller, tenantDbName: req.tenantDbName, user: req.user, req })
 
@@ -17,6 +18,14 @@ export const list = asyncHandler(async (req, res) => {
   const parsed = listSubstoresQuerySchema.safeParse(req.query)
   if (!parsed.success) throw new ApiError(400, parsed.error.issues[0]?.message ?? "Invalid query")
   const data = await listSubstores({ ...ctx(req), query: parsed.data })
+  res.json(data)
+})
+
+// Lean picker feed — only _id/name/alias, paginated for lazy-loading dropdowns.
+export const options = asyncHandler(async (req, res) => {
+  const parsed = listSubstoreOptionsQuerySchema.safeParse(req.query)
+  if (!parsed.success) throw new ApiError(400, parsed.error.issues[0]?.message ?? "Invalid query")
+  const data = await listSubstoreOptions({ ...ctx(req), query: parsed.data })
   res.json(data)
 })
 

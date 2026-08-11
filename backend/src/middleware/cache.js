@@ -1,11 +1,6 @@
 import { cacheGet, cacheSet } from "../config/redis.js"
 
-/**
- * Response-caching middleware for GET endpoints.
- * Key = prefix + sorted query string, so ?page=1&limit=20 and ?limit=20&page=1 share one entry.
- *
- * Usage: router.get("/sellers", cache("platform:sellers"), getSellers)
- */
+
 export function cache(prefix, ttlSeconds) {
   return async (req, res, next) => {
     if (req.method !== "GET") return next()

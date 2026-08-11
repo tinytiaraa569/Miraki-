@@ -2,8 +2,7 @@ import { PlatformUser } from "../models/platformUser.model.js"
 import { hashPassword } from "../utils/crypto.js"
 import { env } from "./env.js"
 
-// Drops the legacy unique index on `role` (from the single-superadmin era).
-// Without this, MongoDB would keep rejecting any second superadmin document.
+
 async function dropLegacyRoleIndex() {
   try {
     const indexes = await PlatformUser.collection.indexes()
@@ -12,15 +11,13 @@ async function dropLegacyRoleIndex() {
       console.log("[server] Dropped legacy unique role_1 index on platformUsers")
     }
   } catch (err) {
-    // Collection may not exist yet on first boot — that's fine.
     if (err.codeName !== "NamespaceNotFound") {
       console.warn("[server] Could not check/drop legacy role index:", err.message)
     }
   }
 }
 
-// The FIRST platform superadmin exists ONLY via this seed and is marked
-// isOriginal so it can never be suspended. More can be created via the API.
+
 export async function seedPlatformSuperadmin() {
   await dropLegacyRoleIndex()
 

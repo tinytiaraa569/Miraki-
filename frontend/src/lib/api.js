@@ -9,15 +9,15 @@ export class ApiError extends Error {
   }
 }
 
-// Auth endpoints where a 401 is an expected outcome (bad password, invalid
-// 2FA code, the /auth/me probe itself) — these must NOT nuke the session state.
-const AUTH_PATHS = [
-  "/auth/me",
+// Endpoints where a 401 is a NORMAL outcome (wrong password, invalid 2FA code,
+// logout, or the refresh call itself). We must NOT attempt a silent refresh for
+// these — doing so would loop or mask a real "bad credentials" response.
+const NO_REFRESH_PATHS = [
   "/auth/login",
   "/auth/2fa/setup",
   "/auth/2fa/verify",
   "/auth/logout",
-  "/seller/me",
+  "/auth/refresh",
   "/seller/auth/login",
   "/seller/store-admin/auth/login",
   "/seller/store-admin/auth/me",
@@ -26,7 +26,27 @@ const AUTH_PATHS = [
   "/seller/store-admin/auth/logout"
 ]
 
-async function request(path, options = {}) {
+// Single-flight silent refresh. The 15-min access token expires constantly;
+// when it does, the browser still holds the long-lived (multi-day) refresh
+// token cookie. This swaps it for a fresh access token WITHOUT logging the user
+// out. If many requests 401 at once, they all await the SAME refresh call.
+let refreshPromise = null
+function refreshSession() {
+  if (!refreshPromise) {
+    refreshPromise = fetch(`${BASE}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+    })
+      .then((r) => r.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshPromise = null
+      })
+  }
+  return refreshPromise
+}
+
+async function request(path, options = {}, _retried = false) {
   const res = await fetch(`${BASE}${path}`, {
     credentials: "include",
     headers: { "Content-Type": "application/json", ...options.headers },
@@ -34,12 +54,16 @@ async function request(path, options = {}) {
   })
   const body = await res.json().catch(() => ({}))
   if (!res.ok) {
-    // A 401 on any DATA endpoint means the session is dead (expired, revoked,
-    // or restored from bfcache after logout). Immediately drop the cached auth
-    // state so ProtectedRoute redirects to the login page instead of leaving
-    // a broken dashboard on screen.
-    if (res.status === 401 && !AUTH_PATHS.includes(path)) {
-      // Drop whichever auth probe matches the dead session's surface.
+    if (res.status === 401 && !NO_REFRESH_PATHS.includes(path)) {
+      // The access token likely just expired. Try to silently refresh it ONCE
+      // using the long-lived refresh token, then replay the original request.
+      if (!_retried) {
+        const refreshed = await refreshSession()
+        if (refreshed) return request(path, options, true)
+      }
+      // Refresh failed → the session is genuinely dead (refresh token expired,
+      // revoked, or absent). Only NOW do we drop the cached auth state so
+      // ProtectedRoute redirects to login instead of showing a broken screen.
       if (path.startsWith("/seller/")) {
         globalMutate("/seller/me", { user: null }, { revalidate: false })
       } else {

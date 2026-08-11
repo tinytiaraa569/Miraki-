@@ -33,6 +33,14 @@ export function StorefrontProvider({ children }) {
 
   const substore = data?.substore ?? null
 
+  // Country/region options for the navbar dropdown come from the DB, not a
+  // hardcoded list. Cached hard (5min SWR dedupe) — the list rarely changes.
+  const { data: listData } = useSWR("/storefront/substores", fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 300_000,
+  })
+  const substores = listData?.substores ?? []
+
   // One shared formatter per substore — Intl construction is not free.
   const priceFormatter = useMemo(() => {
     if (!substore?.currency) return null
@@ -60,10 +68,12 @@ export function StorefrontProvider({ children }) {
 
   const switchCountry = useCallback((code) => {
     rememberCountry(code)
-    // Full URL swap (not router state): resets the ?country override cleanly
-    // and lets the SW/HTTP cache serve the already-warm payload instantly.
+    // Persist the choice in the cookie only, then reload a CLEAN url (no
+    // ?country= param). The cookie is sent on every API request, so the server
+    // resolves the picked substore for ALL endpoints (detail, variant-media,
+    // feed) and the address bar stays tidy.
     const url = new URL(window.location.href)
-    url.searchParams.set("country", code)
+    url.searchParams.delete("country")
     window.location.assign(url.toString())
   }, [])
 
@@ -71,6 +81,7 @@ export function StorefrontProvider({ children }) {
     () => ({
       resolved: data ?? null,
       substore,
+      substores,
       canvas: data?.canvas ?? null,
       countryCode: data?.countryCode ?? null,
       isLoading: isLoading && !data,
@@ -78,7 +89,7 @@ export function StorefrontProvider({ children }) {
       formatPrice,
       switchCountry,
     }),
-    [data, substore, isLoading, error, formatPrice, switchCountry],
+    [data, substore, substores, isLoading, error, formatPrice, switchCountry],
   )
 
   return <StorefrontContext.Provider value={value}>{children}</StorefrontContext.Provider>
