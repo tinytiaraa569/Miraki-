@@ -179,3 +179,5 @@ export const disableTwoFactor = asyncHandler(async (req, res) => {
   await audit({ req, actorId: user._id, actorRole: user.role, action: "auth.2fa_disabled", targetType: "PlatformUser", targetId: user._id })
   res.json({ required: false, enrolled: false })
 })
+
+
