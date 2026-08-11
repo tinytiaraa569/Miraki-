@@ -3,6 +3,9 @@ import { storeSchema } from "../modules/stores/store.model.js"
 import { storeVariantSchema } from "../modules/storevariants/storevariant.model.js"
 import { substoreSchema } from "../modules/substores/substore.model.js"
 import { storeUserSchema } from "../modules/users/storeUser.model.js"
+import { permissionSchema } from "../modules/permissions/permission.model.js"
+import { roleSchema } from "../modules/roles/role.model.js"
+import { storeAdminSchema } from "../modules/storeadmins/storeadmin.model.js"
 
 // -----------------------------------------------------------------------------
 // DATABASE-PER-TENANT MULTI-TENANCY
@@ -59,6 +62,9 @@ export function getTenantModels(dbName) {
     StoreUser: conn.models.StoreUser || conn.model("StoreUser", storeUserSchema, "storeUsers"),
     Substore: conn.models.Substore || conn.model("Substore", substoreSchema, "substores"),
     StoreVariant: conn.models.StoreVariant || conn.model("StoreVariant", storeVariantSchema, "storevariants"),
+    Permission : conn.models.Permission || conn.model("Permission", permissionSchema, "permissions"),
+    Role : conn.models.Role || conn.model("Role", roleSchema, "roles"),
+    StoreAdmin : conn.models.StoreAdmin || conn.model("StoreAmin", storeAdminSchema, "storeadmins"),
   }
 
   modelCache.set(dbName, models)
