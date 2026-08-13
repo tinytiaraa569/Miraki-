@@ -1,6 +1,7 @@
 import { getTenantModels } from "../../config/tenantDb.js"
 import { ApiError } from "../../utils/apiError.js"
 import { audit } from "../audit/audit.service.js"
+import { buildDefaultPermissionDocs } from "./permission.catalog.js"
 
 const SORTS = {
   sortOrder: { sortOrder: 1, createdAt: 1 },
@@ -65,6 +66,105 @@ const limit = Number(query.limit) || 20
     page,
     limit,
   }
+}
+
+// GROUPED LIST — a single aggregation that groups permissions by
+// category -> module (actions ordered), and paginates at the CATEGORY level so
+// the hub never over-fetches the whole permission set just to render its
+// grouped view. Ordering follows sortOrder (i.e. sidebar order).
+export async function listGroupedPermissions({ seller, tenantDbName, query }) {
+  const { Permission } = getTenantModels(tenantDbName)
+  const page = Number(query.page) || 1
+  const limit = Number(query.limit) || 6
+
+  const match = { sellerId: seller._id }
+  if (query.module) match.module = query.module
+  if (query.category) match.category = query.category
+  if (query.action) match.action = query.action
+  if (typeof query.isActive === "boolean") match.isActive = query.isActive
+  if (typeof query.isSystem === "boolean") match.isSystem = query.isSystem
+  if (query.q) {
+    const re = { $regex: escapeRegex(query.q), $options: "i" }
+    match.$or = [{ label: re }, { key: re }, { description: re }]
+  }
+
+  const [result] = await Permission.aggregate([
+    { $match: match },
+    { $sort: { sortOrder: 1, createdAt: 1 } },
+    // 1) collapse each (category, module) into an ordered action list
+    {
+      $group: {
+        _id: { category: { $ifNull: ["$category", "$module"] }, module: "$module" },
+        permissions: {
+          $push: {
+            _id: "$_id",
+            key: "$key",
+            action: "$action",
+            label: "$label",
+            module: "$module",
+            category: "$category",
+            description: "$description",
+            isActive: "$isActive",
+            isSystem: "$isSystem",
+            sortOrder: "$sortOrder",
+          },
+        },
+        activeCount: { $sum: { $cond: [{ $eq: ["$isActive", true] }, 1, 0] } },
+        minSort: { $min: "$sortOrder" },
+      },
+    },
+    { $sort: { minSort: 1, "_id.module": 1 } },
+    // 2) nest modules under their category
+    {
+      $group: {
+        _id: "$_id.category",
+        modules: {
+          $push: {
+            module: "$_id.module",
+            permissions: "$permissions",
+            activeCount: "$activeCount",
+            total: { $size: "$permissions" },
+          },
+        },
+        permissionCount: { $sum: { $size: "$permissions" } },
+        activeCount: { $sum: "$activeCount" },
+        minSort: { $min: "$minSort" },
+      },
+    },
+    { $sort: { minSort: 1, _id: 1 } },
+    {
+      $project: {
+        _id: 0,
+        category: "$_id",
+        modules: 1,
+        permissionCount: 1,
+        activeCount: 1,
+        moduleCount: { $size: "$modules" },
+      },
+    },
+    // 3) paginate categories + total category count in one round-trip
+    {
+      $facet: {
+        rows: [{ $skip: (page - 1) * limit }, { $limit: limit }],
+        total: [{ $count: "n" }],
+      },
+    },
+  ])
+
+  return {
+    rows: result?.rows ?? [],
+    total: result?.total?.[0]?.n ?? 0,
+    page,
+    limit,
+  }
+}
+
+// Lightweight key list for the whole seller — lets the "add permissions" sheet
+// disable already-existing entries without fetching every permission document.
+export async function listPermissionKeys({ seller, tenantDbName }) {
+  const { Permission } = getTenantModels(tenantDbName)
+  const docs = await Permission.find({ sellerId: seller._id }).select("_id key").lean()
+  return { keys: docs.map((d) => d.key), ids: docs.map((d) => String(d._id)) }
 }
 
 export async function getPermission({ seller, tenantDbName, id }) {
@@ -222,4 +322,50 @@ export async function bulkDeletePermissionDocs({ seller, tenantDbName, user, ids
       notFound: notFoundIds,
     },
   }
+}
+
+// RESEED — insert any MISSING default (sidebar) permissions for this seller.
+// Insert-only: existing permissions (including seller-toggled isActive / edited
+// label) are never modified, because we only use $setOnInsert. The upsert filter
+// matches the unique index { sellerId, key, action, category }, so it is
+// idempotent and safe to run repeatedly / concurrently.
+export async function reseedDefaultPermissions({ seller, tenantDbName, user, req }) {
+  const { Permission } = getTenantModels(tenantDbName)
+
+  const docs = buildDefaultPermissionDocs()
+
+  const ops = docs.map((d) => ({
+    updateOne: {
+      filter: { sellerId: seller._id, key: d.key, action: d.action, category: d.category },
+      update: {
+        $setOnInsert: {
+          module: d.module,
+          label: d.label,
+          description: d.description,
+          isActive: true,
+          isSystem: false,
+          sortOrder: d.sortOrder,
+          createdBy: user._id,
+        },
+      },
+      upsert: true,
+    },
+  }))
+
+  const result = await Permission.bulkWrite(ops, { ordered: false })
+  const insertedCount = result.upsertedCount ?? 0
+  const totalCatalog = docs.length
+  const existingCount = totalCatalog - insertedCount
+
+  await audit({
+    req,
+    actorId: user._id,
+    actorRole: user.role,
+    sellerId: seller._id,
+    action: "seller.permission.reseeded",
+    targetType: "Permission",
+    after: { insertedCount, existingCount, totalCatalog },
+  })
+
+  return { ok: true, insertedCount, existingCount, totalCatalog }
 }

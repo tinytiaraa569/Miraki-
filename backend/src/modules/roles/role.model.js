@@ -26,11 +26,11 @@ export const roleSchema = new mongoose.Schema(
     status: { type: String, enum: ["active", "inactive"], default: "active" },
     isSystem: { type: Boolean, default: false },
 
-    // Scope of records a user with this role can see/act on.
+    // Scope of records a user with this role can see/act on. Optional — a role
+    // may leave this unset (blank) until an admin explicitly chooses.
     dataAccess: {
       type: String,
       enum: ["own_substore", "multiple_substores", "all_substores"],
-      default: "own_substore",
     },
 
     // view all store data but manage own store data?
