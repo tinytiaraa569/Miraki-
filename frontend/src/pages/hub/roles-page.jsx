@@ -100,7 +100,10 @@ function AccessCell({ dataAccess, substores }) {
       </span>
     )
   }
-  return <span className="text-xs text-muted-foreground">Own substore only</span>
+  if (dataAccess === "own_substore") {
+    return <span className="text-xs text-muted-foreground">Own substore only</span>
+  }
+  return <span className="text-xs text-muted-foreground">—</span>
 }
 
 /** /hub/staff/roles — Roles list with a side panel for create/edit. */

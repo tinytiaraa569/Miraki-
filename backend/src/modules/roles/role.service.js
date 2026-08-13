@@ -86,8 +86,8 @@ export async function listRoles({ seller, tenantDbName, query }) {
               otherSubstoreAccess: 1,
               // substores: 1,
               permissionCount: { $size: { $ifNull: ["$permissions", []] } },
-            //   isDeleted: 1,
-            //   deletedAt: 1,
+              isDeleted: 1,
+              deletedAt: 1,
             //   createdAt: 1,
             //   updatedAt: 1,
             },
@@ -108,11 +108,24 @@ export async function listRoles({ seller, tenantDbName, query }) {
 
 export async function getRole({ seller, tenantDbName, id }) {
   const { Role } = getTenantModels(tenantDbName)
-  const doc = await Role.findOne({ _id: id, sellerId: seller._id })
-    // .populate("permissions", "name key")
-    .populate("permissions", "name key module action label sortOrder")
-    // .populate("substoreIds", "name alias")
-    .lean()
+  if (!mongoose.Types.ObjectId.isValid(id)) throw new ApiError(404, "Role not found")
+
+  // Single aggregation round-trip: match the role and $lookup a lean permission
+  // summary in one shot (replaces the extra Mongoose populate query). The raw
+  // `permissions` id array is what the form pre-checks against; `permissionsInfo`
+  // carries the labels for anything that wants to render names.
+  const [doc] = await Role.aggregate([
+    { $match: { _id: new mongoose.Types.ObjectId(String(id)), sellerId: seller._id } },
+    {
+      $lookup: {
+        from: "permissions",
+        localField: "permissions",
+        foreignField: "_id",
+        pipeline: [{ $project: { key: 1, action: 1, module: 1, category: 1, label: 1, sortOrder: 1 } }],
+        as: "permissionsInfo",
+      },
+    },
+  ])
   if (!doc) throw new ApiError(404, "Role not found")
   return doc
 }
@@ -194,7 +207,10 @@ export async function updateRoleDoc({ seller, tenantDbName, user, id, body, req 
 
 
   
-  if (dataAccess) doc.dataAccess = dataAccess
+  if (dataAccess !== undefined) {
+    if (dataAccess) doc.dataAccess = dataAccess
+    else doc.set("dataAccess", undefined) // explicit clear → blank
+  }
 
   for (const [key, value] of Object.entries(rest)) doc[key] = value
   doc.updatedBy = user._id

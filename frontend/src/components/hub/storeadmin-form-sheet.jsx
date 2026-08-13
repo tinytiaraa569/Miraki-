@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import useSWR from "swr"
+import useSWRInfinite from "swr/infinite"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,9 +26,21 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { MultiSelect } from "@/components/hub/multi-select"
 import { api, fetcher } from "@/lib/api"
+import { cn } from "@/lib/utils"
 
 const EMPTY_FORM = {
   name: "",
@@ -49,6 +62,34 @@ const MODULE_ICONS = {
 
 function moduleIcon(module) {
   return MODULE_ICONS[module] ?? KeyRound
+}
+
+const ACTION_ORDER = ["read", "write", "update", "delete", "manage", "export"]
+const ACTION_LABELS = {
+  read: "View",
+  write: "Create",
+  update: "Edit",
+  delete: "Delete",
+  manage: "Manage",
+  export: "Export",
+}
+const ACTION_STYLES = {
+  read: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+  write: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  update: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  delete: "bg-destructive/10 text-destructive",
+  manage: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
+  export: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
+}
+function titleCase(s) {
+  return (s || "").replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+}
+function sortActions(docs) {
+  return [...docs].sort((a, b) => {
+    const ai = ACTION_ORDER.indexOf(a.action)
+    const bi = ACTION_ORDER.indexOf(b.action)
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
+  })
 }
 
 function docToForm(doc) {
@@ -107,8 +148,6 @@ export function StoreAdminFormSheet({ open, onOpenChange, adminId, onSaved }) {
   const [showPassword, setShowPassword] = useState(false)
 
   const { data: rolesData } = useSWR(open ? "/seller/roles?limit=10&status=active" : null, fetcher)
-  const { data: substoresData } = useSWR(open ? "/seller/substores?limit=20" : null, fetcher)
-
 
   const { data: roleDetailData, isLoading: roleDetailLoading } = useSWR(
     open && form.roleId ? `/seller/roles/${form.roleId}` : null,
@@ -116,7 +155,6 @@ export function StoreAdminFormSheet({ open, onOpenChange, adminId, onSaved }) {
   )
 
   const roles = rolesData?.rows ?? []
-  const substoresList = substoresData?.rows ?? []
 
   const selectedRole = roles.find((r) => r._id === form.roleId)
   const dataAccess = selectedRole?.dataAccess
@@ -124,9 +162,11 @@ export function StoreAdminFormSheet({ open, onOpenChange, adminId, onSaved }) {
   const isAllSubstores = dataAccess === "all_substores"
   const needsSubstores = !isAllSubstores
 
-
+  // Role permissions come from getRole's lean $lookup (permissionsInfo); fall
+  // back to a populated `permissions` array for safety.
   const rolePermissions = useMemo(() => {
-    const perms = roleDetailData?.role?.permissions ?? []
+    const perms =
+      roleDetailData?.role?.permissionsInfo ?? roleDetailData?.role?.permissions ?? []
     return perms
       .filter((p) => p && typeof p === "object" && p.module && p.action)
       .slice()
@@ -138,20 +178,93 @@ export function StoreAdminFormSheet({ open, onOpenChange, adminId, onSaved }) {
     [rolePermissions],
   )
 
-  const roleSubstoreIds = useMemo(() => {
+  // Group the role's granted permissions by category -> module (same shape the
+  // role editor uses), so the tab renders the accordion module/submodule UI.
+  const groupedPermissions = useMemo(() => {
+    const byCat = new Map()
+    for (const p of rolePermissions) {
+      const cat = p.category || p.module
+      if (!byCat.has(cat)) byCat.set(cat, new Map())
+      const mods = byCat.get(cat)
+      if (!mods.has(p.module)) mods.set(p.module, [])
+      mods.get(p.module).push(p)
+    }
+    return [...byCat.entries()].map(([category, mods]) => ({
+      category,
+      modules: [...mods.entries()].map(([module, permissions]) => ({
+        module,
+        permissions,
+      })),
+    }))
+  }, [rolePermissions])
+
+  const roleSubstoreIdList = useMemo(() => {
     const ids = roleDetailData?.role?.substoreIds ?? []
-    return new Set(ids.map((s) => (typeof s === "string" ? s : s._id)))
+    return ids.map((s) => (typeof s === "string" ? s : s._id))
   }, [roleDetailData])
+  const roleSubstoreIds = useMemo(() => new Set(roleSubstoreIdList), [roleSubstoreIdList])
+  // A role scoped to specific substores → the admin may only be assigned within
+  // that set. Otherwise the picker offers all substores.
+  const isScoped = !isAllSubstores && roleSubstoreIdList.length > 0
 
-  const allowedSubstoresList = useMemo(() => {
-    if (isAllSubstores || roleSubstoreIds.size === 0) return substoresList
-    return substoresList.filter((s) => roleSubstoreIds.has(String(s._id)))
-  }, [substoresList, roleSubstoreIds, isAllSubstores])
+  // SCOPED: fetch exactly the role's substores by id (bounded, one call).
+  const { data: scopedSubData, isLoading: scopedSubLoading } = useSWR(
+    open && isScoped ? `/seller/substores/options?ids=${roleSubstoreIdList.join(",")}` : null,
+    fetcher,
+    { revalidateOnFocus: false, shouldRetryOnError: false },
+  )
 
-  const substoreOptions = allowedSubstoresList.map((s) => ({ value: s.name, label: s.name }))
-  const selectedSubstoreNames = allowedSubstoresList
-    .filter((s) => form.substoreIds?.includes(String(s._id)))
-    .map((s) => s.name)
+  // UNSCOPED: lazy, paged options feed — only fetched once the picker opens.
+  const SUBSTORE_PAGE_SIZE = 20
+  const [substoreQuery, setSubstoreQuery] = useState("")
+  const [substorePickerOpen, setSubstorePickerOpen] = useState(false)
+  const getSubstoreKey = (index, prev) => {
+    if (!open || !needsSubstores || isScoped || !substorePickerOpen) return null
+    if (prev && (prev.rows?.length ?? 0) < SUBSTORE_PAGE_SIZE) return null
+    const params = new URLSearchParams({
+      page: String(index + 1),
+      limit: String(SUBSTORE_PAGE_SIZE),
+    })
+    if (substoreQuery) params.set("q", substoreQuery)
+    return `/seller/substores/options?${params.toString()}`
+  }
+  const {
+    data: substorePages,
+    size: substoreSize,
+    setSize: setSubstoreSize,
+    isLoading: substoreLoading,
+    isValidating: substoreValidating,
+  } = useSWRInfinite(getSubstoreKey, fetcher, {
+    revalidateOnFocus: false,
+    revalidateFirstPage: false,
+    shouldRetryOnError: false,
+  })
+  const pagedSubRows = (substorePages ?? []).flatMap((p) => p?.rows ?? [])
+  const substoreTotal = substorePages?.[0]?.total ?? 0
+  const substoreHasMore = pagedSubRows.length < substoreTotal
+  const substoreLoadingMore =
+    substoreValidating && substorePages && substoreSize > substorePages.length
+
+  // Labels for already-selected substores (edit mode) so chips aren't blank.
+  const { data: selectedSubData } = useSWR(
+    open && form.substoreIds?.length
+      ? `/seller/substores/options?ids=${form.substoreIds.join(",")}`
+      : null,
+    fetcher,
+    { revalidateOnFocus: false, shouldRetryOnError: false },
+  )
+
+  // Rows the picker offers: scoped → the role's set; otherwise selected + paged.
+  const allowedRows = useMemo(() => {
+    if (isScoped) return scopedSubData?.rows ?? []
+    const byId = new Map()
+    for (const s of selectedSubData?.rows ?? []) byId.set(String(s._id), s)
+    for (const s of pagedSubRows) byId.set(String(s._id), s)
+    return [...byId.values()]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isScoped, scopedSubData, selectedSubData, pagedSubRows.length])
+
+  const substoreOptions = allowedRows.map((s) => ({ value: String(s._id), label: s.name }))
 
   const { modules, actions, cellMap } = useMemo(() => {
     const moduleSet = new Set()
@@ -310,7 +423,7 @@ export function StoreAdminFormSheet({ open, onOpenChange, adminId, onSaved }) {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl">
+      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-4xl">
         <SheetHeader className="border-b border-border px-6 py-4">
           <SheetTitle>{isEdit ? "Edit store admin" : "Add store admin"}</SheetTitle>
           <SheetDescription>
@@ -426,12 +539,13 @@ export function StoreAdminFormSheet({ open, onOpenChange, adminId, onSaved }) {
                       <Select
                         value={form.substoreIds[0] ?? ""}
                         onValueChange={(v) => set("substoreIds")(v ? [v] : [])}
+                        onOpenChange={(o) => o && setSubstorePickerOpen(true)}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Select substore" />
                         </SelectTrigger>
                         <SelectContent>
-                          {allowedSubstoresList.map((s) => (
+                          {allowedRows.map((s) => (
                             <SelectItem key={s._id} value={s._id}>
                               {s.name}
                             </SelectItem>
@@ -450,17 +564,23 @@ export function StoreAdminFormSheet({ open, onOpenChange, adminId, onSaved }) {
                     >
                       <MultiSelect
                         options={substoreOptions}
-                        selected={selectedSubstoreNames}
-                        onChange={(names) => {
-                          const ids = names
-                            .map((name) => {
-                              const substore = allowedSubstoresList.find((s) => s.name === name)
-                              return substore ? String(substore._id) : null
-                            })
-                            .filter(Boolean)
-                          set("substoreIds")(ids)
-                        }}
+                        selected={form.substoreIds}
+                        onChange={(ids) => set("substoreIds")(ids)}
                         placeholder="Select substores"
+                        emptyText="No substores"
+                        onOpenChange={(o) => o && setSubstorePickerOpen(true)}
+                        loading={isScoped ? scopedSubLoading : substoreLoading}
+                        hasMore={isScoped ? false : substoreHasMore}
+                        isLoadingMore={substoreLoadingMore}
+                        onLoadMore={() => setSubstoreSize(substoreSize + 1)}
+                        onSearch={
+                          isScoped
+                            ? undefined
+                            : (q) => {
+                                setSubstoreQuery(q)
+                                setSubstoreSize(1)
+                              }
+                        }
                       />
                     </Field>
                   )
@@ -513,76 +633,134 @@ export function StoreAdminFormSheet({ open, onOpenChange, adminId, onSaved }) {
 
                     {roleDetailLoading ? (
                       <Skeleton className="h-64 w-full" />
+                    ) : groupedPermissions.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                        This role grants no permissions.
+                      </div>
                     ) : (
-                      <div className="overflow-auto rounded-xl border border-border">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-muted/50 hover:bg-muted/50">
-                              <TableHead className="sticky left-0 z-10 bg-muted/50">Module</TableHead>
-                              {actions.map((action) => (
-                                <TableHead key={action} className="text-center capitalize">
-                                  {action}
-                                </TableHead>
-                              ))}
-                              <TableHead className="w-10" />
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {modules.length === 0 ? (
-                              <TableRow>
-                                <TableCell colSpan={actions.length + 2} className="h-24 text-center text-sm text-muted-foreground">
-                                  This role grants no permissions.
-                                </TableCell>
-                              </TableRow>
-                            ) : (
-                              modules.map((module) => {
-                                const Icon = moduleIcon(module)
-                                const items = permissionsByModule.get(module) ?? []
-                                const hasOverrideInRow = items.some((p) => isRevoked(p._id))
-                                return (
-                                  <TableRow key={module}>
-                                    <TableCell className="sticky left-0 z-10 bg-background">
-                                      <div className="flex items-center gap-2">
-                                        <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
-                                        <span className="text-sm font-medium capitalize text-foreground">{module}</span>
-                                      </div>
-                                    </TableCell>
-                                    {actions.map((action) => {
-                                      const permission = cellMap.get(`${module}:${action}`)
+                      <TooltipProvider delayDuration={200}>
+                        <Accordion
+                          type="multiple"
+                          defaultValue={groupedPermissions.map((c) => c.category)}
+                          className="flex flex-col gap-2"
+                        >
+                          {groupedPermissions.map((cat) => {
+                            const catPerms = cat.modules.flatMap((m) => m.permissions)
+                            const catRevoked = catPerms.filter((p) => isRevoked(p._id)).length
+                            return (
+                              <AccordionItem
+                                key={cat.category}
+                                value={cat.category}
+                                className="rounded-xl border border-border px-3"
+                              >
+                                <AccordionTrigger className="hover:no-underline">
+                                  <div className="flex flex-1 items-center gap-2">
+                                    <span className="text-sm font-semibold uppercase tracking-wide text-foreground">
+                                      {titleCase(cat.category)}
+                                    </span>
+                                    <Badge variant="secondary" className="font-normal">
+                                      {cat.modules.length} module{cat.modules.length === 1 ? "" : "s"}
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">
+                                      {catPerms.length - catRevoked}/{catPerms.length} effective
+                                    </span>
+                                  </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="pb-3">
+                                  <div className="flex flex-col gap-2">
+                                    {cat.modules.map((m) => {
+                                      const Icon = moduleIcon(m.module)
+                                      const items = sortActions(m.permissions)
+                                      const revokedCount = items.filter((p) => isRevoked(p._id)).length
                                       return (
-                                        <TableCell key={action} className="text-center">
-                                          {permission ? (
-                                            <OverrideCell
-                                              revoked={isRevoked(permission._id)}
-                                              onClick={() => toggleCell(permission)}
-                                              label={permission.label ?? `${module} ${action}`}
-                                            />
-                                          ) : (
-                                            <span className="text-muted-foreground/40">—</span>
-                                          )}
-                                        </TableCell>
+                                        <div
+                                          key={m.module}
+                                          className="flex w-full flex-col gap-2 rounded-lg border border-border bg-card p-3 sm:flex-row sm:items-center sm:gap-4"
+                                        >
+                                          <div className="flex items-center gap-2.5 sm:w-60 sm:shrink-0">
+                                            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted">
+                                              <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
+                                            </div>
+                                            <div className="flex min-w-0 flex-col">
+                                              <span className="truncate text-sm font-medium text-foreground">
+                                                {titleCase(m.module)}
+                                              </span>
+                                              <span className="text-xs text-muted-foreground">
+                                                {items.length - revokedCount}/{items.length} effective
+                                              </span>
+                                            </div>
+                                            {revokedCount > 0 && (
+                                              <button
+                                                type="button"
+                                                onClick={() => resetRowToRoleDefault(m.module)}
+                                                className="ml-auto text-muted-foreground hover:text-foreground"
+                                                aria-label={`Reset ${m.module} to role default`}
+                                                title="Reset to role default"
+                                              >
+                                                <RotateCcw className="size-3.5" aria-hidden="true" />
+                                              </button>
+                                            )}
+                                          </div>
+                                          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                                            {items.map((doc) => {
+                                              const revoked = isRevoked(doc._id)
+                                              return (
+                                                <Tooltip key={doc._id}>
+                                                  <TooltipTrigger asChild>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => toggleCell(doc)}
+                                                      className={cn(
+                                                        "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium capitalize transition-colors",
+                                                        revoked
+                                                          ? "border-border bg-muted text-muted-foreground line-through"
+                                                          : cn(
+                                                              "border-transparent",
+                                                              ACTION_STYLES[doc.action] ??
+                                                                "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+                                                            ),
+                                                      )}
+                                                    >
+                                                      <span
+                                                        className={cn(
+                                                          "size-1.5 rounded-full",
+                                                          revoked
+                                                            ? "bg-muted-foreground/40"
+                                                            : "bg-current",
+                                                        )}
+                                                      />
+                                                      {ACTION_LABELS[doc.action] ?? doc.action}
+                                                    </button>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent side="top" className="max-w-xs">
+                                                    <div className="flex flex-col gap-1">
+                                                      <div className="font-medium">
+                                                        {doc.label || doc.key}
+                                                      </div>
+                                                      <code className="font-mono text-[11px] opacity-80">
+                                                        {doc.key}
+                                                      </code>
+                                                      <p className="text-[11px] opacity-80">
+                                                        {revoked
+                                                          ? "Revoked — click to restore"
+                                                          : "Granted by role — click to revoke"}
+                                                      </p>
+                                                    </div>
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                              )
+                                            })}
+                                          </div>
+                                        </div>
                                       )
                                     })}
-                                    <TableCell>
-                                      {hasOverrideInRow && (
-                                        <button
-                                          type="button"
-                                          onClick={() => resetRowToRoleDefault(module)}
-                                          className="text-muted-foreground hover:text-foreground"
-                                          aria-label={`Reset ${module} to role default`}
-                                          title="Reset row to role default"
-                                        >
-                                          <RotateCcw className="size-3.5" aria-hidden="true" />
-                                        </button>
-                                      )}
-                                    </TableCell>
-                                  </TableRow>
-                                )
-                              })
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
+                                  </div>
+                                </AccordionContent>
+                              </AccordionItem>
+                            )
+                          })}
+                        </Accordion>
+                      </TooltipProvider>
                     )}
                   </>
                 )}

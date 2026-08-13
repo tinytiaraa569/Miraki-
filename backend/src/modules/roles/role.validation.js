@@ -17,7 +17,7 @@ const roleBody = z
     color: hexColor.optional(),
     permissions: z.array(objectId).max(500).optional(),
     status: z.enum(["active", "inactive"]).optional(),
-    dataAccess: z.enum(["own_substore", "multiple_substores", "all_substores"]).optional(),
+    dataAccess: z.enum(["own_substore", "multiple_substores", "all_substores"]).nullable().optional(),
     otherSubstoreAccess: z.enum(["view_only", "permission_based"]).optional(),
     substoreIds: z.array(objectId).max(500).optional(),
   })
@@ -43,7 +43,7 @@ export const updateRoleSchema = z
     color: hexColor.optional(),
     permissions: z.array(objectId).max(500).optional(),
     status: z.enum(["active", "inactive"]).optional(),
-    dataAccess: z.enum(["own_substore", "multiple_substores", "all_substores"]).optional(),
+    dataAccess: z.enum(["own_substore", "multiple_substores", "all_substores"]).nullable().optional(),
     otherSubstoreAccess: z.enum(["view_only", "permission_based"]).optional(),
     substoreIds: z.array(objectId).max(500).optional(),
   })

@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   KeyRound,
   Layers,
-  MoreHorizontal,
-  Pencil,
   Plus,
+  RotateCw,
   Search,
   ShieldCheck,
   Trash2,
@@ -18,6 +18,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -25,13 +31,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -44,12 +43,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { api, fetcher } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { PermissionSelectSheet } from "@/components/hub/permission-select-sheet";
-import { PERMISSION_HUB } from "@/lib/permissions-hub";
 
-// TODO: replace with your real module list (same source the sidebar/nav uses).
+// The grouped endpoint paginates by CATEGORY, so we only ever pull a handful
+// of fully-formed category blocks per request instead of every permission.
+const CATEGORIES_PER_PAGE = 6;
+
 const MODULE_OPTIONS = [
   "stores",
   "products",
@@ -64,19 +72,15 @@ const MODULE_OPTIONS = [
 ];
 
 const ACTION_OPTIONS = ["read", "write", "update", "delete", "manage"];
-
-// Fixed action order so every module's action row reads the same left-to-right.
-const ACTION_ORDER = ["read", "write", "update", "delete", "manage"];
+const ACTION_ORDER = ["read", "write", "update", "delete", "manage", "export"];
 
 const ACTION_STYLES = {
-  read: "border-transparent bg-sky-500/15 text-sky-600 dark:text-sky-400",
-  write:
-    "border-transparent bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-  update:
-    "border-transparent bg-amber-500/15 text-amber-600 dark:text-amber-400",
-  delete: "border-transparent bg-destructive/10 text-destructive",
-  manage:
-    "border-transparent bg-violet-500/15 text-violet-600 dark:text-violet-400",
+  read: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+  write: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  update: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  delete: "bg-destructive/10 text-destructive",
+  manage: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
+  export: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
 };
 
 const EMPTY_FORM = {
@@ -89,11 +93,6 @@ const EMPTY_FORM = {
   isActive: true,
   keyEditedManually: false,
 };
-
-// Permissions lists are small (tens to low hundreds of rows), so the grouped
-// view fetches everything matching the current filters in one page instead
-// of paginating — grouping only makes sense with the full set in hand.
-const GROUP_FETCH_LIMIT = 500;
 
 function slugify(s) {
   return s
@@ -109,43 +108,133 @@ function titleCase(s) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-/** category -> module -> ordered permission  */
-function groupPermissions(rows) {
-  const byCategory = new Map();
-  for (const doc of rows) {
-    const categoryKey = doc.category || doc.module || "uncategorized";
-    if (!byCategory.has(categoryKey)) byCategory.set(categoryKey, new Map());
-    const byModule = byCategory.get(categoryKey);
-    const moduleKey = doc.module || "—";
-    if (!byModule.has(moduleKey)) byModule.set(moduleKey, []);
-    byModule.get(moduleKey).push(doc);
-  }
+function sortActions(docs) {
+  return [...docs].sort((a, b) => {
+    const ai = ACTION_ORDER.indexOf(a.action);
+    const bi = ACTION_ORDER.indexOf(b.action);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+}
 
-  const categories = Array.from(byCategory.entries()).map(
-    ([category, byModule]) => {
-      const modules = Array.from(byModule.entries()).map(
-        ([moduleName, docs]) => {
-          const sorted = [...docs].sort((a, b) => {
-            const ai = ACTION_ORDER.indexOf(a.action);
-            const bi = ACTION_ORDER.indexOf(b.action);
-            return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-          });
-          return { moduleName, docs: sorted };
-        },
-      );
-      modules.sort((a, b) => a.moduleName.localeCompare(b.moduleName));
-      return { category, modules };
-    },
+const ACTION_LABELS = {
+  read: "View",
+  write: "Create",
+  update: "Edit",
+  delete: "Delete",
+  manage: "Manage",
+  export: "Export",
+};
+
+// Compact page list with ellipsis: 1 … 4 5 6 … 12
+function getPageNumbers(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const set = new Set([1, total, current, current - 1, current + 1]);
+  const sorted = [...set].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
+  const out = [];
+  let prev = 0;
+  for (const p of sorted) {
+    if (p - prev > 1) out.push("…");
+    out.push(p);
+    prev = p;
+  }
+  return out;
+}
+
+// Full-width module row: module identity on the left, its action chips filling
+// the rest. Each chip reveals the full permission in a tooltip on hover.
+function PermissionModuleCard({
+  moduleName,
+  docs,
+  activeCount,
+  selection,
+  onToggleModule,
+  onAddAction,
+  onEditDoc,
+}) {
+  const ordered = useMemo(() => sortActions(docs), [docs]);
+  const allSelected = docs.length > 0 && docs.every((d) => selection[d._id]);
+  const someSelected = docs.some((d) => selection[d._id]);
+
+  return (
+    <div className="flex w-full flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-sm transition-colors hover:border-primary/40 sm:flex-row sm:items-center sm:gap-4">
+      <div className="flex items-center gap-2.5 sm:w-72 sm:shrink-0">
+        <Checkbox
+          checked={allSelected || (someSelected && "indeterminate")}
+          onCheckedChange={() => onToggleModule(docs)}
+          aria-label={`Select all ${moduleName} permissions`}
+        />
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted">
+          <Layers className="size-4 text-muted-foreground" aria-hidden="true" />
+        </div>
+        <div className="flex min-w-0 flex-col">
+          <span className="truncate text-sm font-medium text-foreground">
+            {titleCase(moduleName)}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {activeCount}/{docs.length} active
+          </span>
+        </div>
+      </div>
+
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+        {ordered.map((doc) => (
+          <Tooltip key={doc._id}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => onEditDoc(doc)}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md border border-transparent px-2.5 py-1 text-xs font-medium capitalize transition-opacity hover:opacity-80",
+                  ACTION_STYLES[doc.action] ?? "bg-muted text-muted-foreground",
+                  !doc.isActive && "opacity-40 grayscale",
+                )}
+              >
+                {ACTION_LABELS[doc.action] ?? doc.action ?? "—"}
+                {doc.isSystem && (
+                  <ShieldCheck className="size-3 shrink-0" aria-hidden="true" />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1.5 font-medium">
+                  {doc.label || doc.key}
+                  {doc.isSystem && (
+                    <ShieldCheck className="size-3" aria-hidden="true" />
+                  )}
+                </div>
+                <code className="font-mono text-[11px] opacity-80">{doc.key}</code>
+                <div className="flex items-center gap-1.5 text-[11px] opacity-80">
+                  <span className="capitalize">{doc.action}</span>
+                  <span>·</span>
+                  <span>{doc.isActive ? "Active" : "Inactive"}</span>
+                </div>
+                {doc.description ? (
+                  <p className="mt-0.5 text-[11px] opacity-80">{doc.description}</p>
+                ) : null}
+                <p className="mt-1 text-[11px] opacity-60">Click to edit</p>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        ))}
+      </div>
+
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-7 sm:ml-auto sm:shrink-0"
+        aria-label={`Add action to ${moduleName}`}
+        onClick={onAddAction}
+      >
+        <Plus className="size-3.5" aria-hidden="true" />
+      </Button>
+    </div>
   );
-  categories.sort((a, b) => a.category.localeCompare(b.category));
-  return categories;
 }
 
 export function HubPermissionsPage() {
   const [search, setSearch] = useState("");
-  const [moduleFilter, setModuleFilter] = useState("all");
   const [rowSelection, setRowSelection] = useState({}); // { [docId]: true }
-  const [collapsed, setCollapsed] = useState({}); // { [categoryKey]: true }
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -153,42 +242,54 @@ export function HubPermissionsPage() {
   const [deleteTarget, setDeleteTarget] = useState(null); // single doc or "bulk"
   const [deleting, setDeleting] = useState(false);
   const [permissionForm, setPermissionForm] = useState(false);
+  const [reseeding, setReseeding] = useState(false);
 
   const q = useDebouncedValue(search, 300);
+  const [page, setPage] = useState(1);
 
   const params = new URLSearchParams({
-    page: "1",
-    limit: String(GROUP_FETCH_LIMIT),
-    sort: "sortOrder",
+    page: String(page),
+    limit: String(CATEGORIES_PER_PAGE),
   });
   if (q.trim()) params.set("q", q.trim());
-  if (moduleFilter !== "all") params.set("module", moduleFilter);
 
-  const { data, isLoading, error, mutate } = useSWR(
-    `/seller/permissions?${params}`,
+  const { data, error, isLoading, isValidating, mutate } = useSWR(
+    `/seller/permissions/grouped?${params.toString()}`,
     fetcher,
-    {
-      revalidateOnFocus: false,
-      keepPreviousData: true,
-    },
+    { revalidateOnFocus: false, keepPreviousData: true },
   );
 
-  const rows = data?.rows ?? [];
-  const total = data?.total ?? 0;
-  const groups = useMemo(() => groupPermissions(rows), [rows]);
+  // A fresh search resets to page 1.
+  useEffect(() => {
+    setPage(1);
+  }, [q]);
 
-  function toggleCategory(category) {
-    setCollapsed((c) => ({ ...c, [category]: !c[category] }));
-  }
+  // Navigating pages / searching clears the per-page bulk selection.
+  useEffect(() => {
+    setRowSelection({});
+  }, [page, q]);
 
-  function toggleRow(id) {
-    setRowSelection((s) => {
-      const next = { ...s };
-      if (next[id]) delete next[id];
-      else next[id] = true;
-      return next;
-    });
-  }
+  const categories = useMemo(() => data?.rows ?? [], [data]);
+  const totalCategories = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCategories / CATEGORIES_PER_PAGE));
+  const pageNumbers = useMemo(
+    () => getPageNumbers(page, totalPages),
+    [page, totalPages],
+  );
+
+  // Keep the page in range if the total shrinks (e.g. after a bulk delete).
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  // Docs on the current page — used for bulk-delete resolution.
+  const loadedDocs = useMemo(
+    () =>
+      categories.flatMap((c) =>
+        (c.modules ?? []).flatMap((m) => m.permissions ?? []),
+      ),
+    [categories],
+  );
 
   function toggleModuleGroup(docs) {
     const allSelected = docs.every((d) => rowSelection[d._id]);
@@ -205,7 +306,6 @@ export function HubPermissionsPage() {
   function openCreate(prefill = {}) {
     setEditingDoc(null);
     setForm({ ...EMPTY_FORM, ...prefill });
-    // setDialogOpen(true)
     setPermissionForm(true);
   }
 
@@ -240,18 +340,6 @@ export function HubPermissionsPage() {
     });
   }
 
-  async function toggleActive(doc) {
-    try {
-      await api.patch(`/seller/permissions/${doc._id}`, {
-        isActive: !doc.isActive,
-      });
-      toast.success(`${doc.label} ${doc.isActive ? "disabled" : "enabled"}`);
-      mutate();
-    } catch (err) {
-      toast.error(err.message);
-    }
-  }
-
   async function saveForm() {
     if (!form.label.trim() || !form.key.trim() || !form.module) {
       toast.error("Label, module, and key are required");
@@ -284,53 +372,31 @@ export function HubPermissionsPage() {
     }
   }
 
-  // async function confirmDelete() {
-  //   setDeleting(true);
-  //   try {
-  //     if (deleteTarget === "bulk") {
-  //       const targets = rows.filter((r) => rowSelection[r._id]);
-  //       const deletable = targets.filter((r) => !r.isSystem);
-  //       const skipped = targets.length - deletable.length;
-
-  //       await Promise.all(
-  //         deletable.map((r) => api.delete(`/seller/permissions/${r._id}`)),
-  //       );
-
-  //       if (deletable.length > 0) {
-  //         toast.success(
-  //           `Deleted ${deletable.length} permission${deletable.length === 1 ? "" : "s"}`,
-  //         );
-  //       }
-  //       if (skipped > 0) {
-  //         toast.error(
-  //           `${skipped} system permission${skipped === 1 ? "" : "s"} can't be deleted and ${skipped === 1 ? "was" : "were"} skipped`,
-  //         );
-  //       }
-  //       setRowSelection({});
-  //     } else {
-  //       await api.delete(`/seller/permissions/${deleteTarget._id}`);
-  //       toast.success(`Deleted ${deleteTarget.label}`);
-  //     }
-  //     setDeleteTarget(null);
-  //     mutate();
-  //   } catch (err) {
-  //     toast.error(err.message);
-  //   } finally {
-  //     setDeleting(false);
-  //   }
-  // }
+  async function handleReseed() {
+    setReseeding(true);
+    try {
+      const r = await api.post("/seller/permissions/reseed");
+      toast.success(
+        r.insertedCount > 0
+          ? `Added ${r.insertedCount} missing permission${r.insertedCount === 1 ? "" : "s"}`
+          : "Permissions already up to date",
+      );
+      mutate();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setReseeding(false);
+    }
+  }
 
   async function confirmDelete() {
     setDeleting(true);
     try {
       if (deleteTarget === "bulk") {
-        const targets = rows.filter((r) => rowSelection[r._id]);
-        const ids = targets.map((r) => r._id);
-        console.log("sending ids:", ids);
+        const ids = Object.keys(rowSelection);
         const result = await api.post("/seller/permissions/bulk-delete", {
           ids,
         });
-
         if (result.deletedCount > 0) {
           toast.success(
             `Deleted ${result.deletedCount} permission${result.deletedCount === 1 ? "" : "s"}`,
@@ -340,12 +406,6 @@ export function HubPermissionsPage() {
         if (skippedSystem > 0) {
           toast.error(
             `${skippedSystem} system permission${skippedSystem === 1 ? "" : "s"} can't be deleted and ${skippedSystem === 1 ? "was" : "were"} skipped`,
-          );
-        }
-        const skippedNotFound = result.skipped?.notFound?.length ?? 0;
-        if (skippedNotFound > 0) {
-          toast.error(
-            `${skippedNotFound} permission${skippedNotFound === 1 ? "" : "s"} no longer existed`,
           );
         }
         setRowSelection({});
@@ -363,39 +423,52 @@ export function HubPermissionsPage() {
   }
 
   const selectedCount = Object.keys(rowSelection).length;
-  const selectedSystemCount = rows.filter(
+  const selectedSystemCount = loadedDocs.filter(
     (r) => rowSelection[r._id] && r.isSystem,
   ).length;
   const isSystemEdit = Boolean(editingDoc?.isSystem);
-  const existingKeys = useMemo(() => new Set(rows.map((r) => r.key)), [rows]);
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold text-balance text-foreground md:text-2xl">
-            Permissions
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Define what store admins can view and manage across each module.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {selectedCount > 0 && (
+    <TooltipProvider delayDuration={200}>
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-xl font-semibold text-balance text-foreground md:text-2xl">
+              Permissions
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Define what store admins can view and manage across each module.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {selectedCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDeleteTarget("bulk")}
+              >
+                <Trash2 className="size-3.5" aria-hidden="true" />
+                Delete ({selectedCount})
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setDeleteTarget("bulk")}
+              onClick={handleReseed}
+              disabled={reseeding}
             >
-              <Trash2 className="size-3.5" aria-hidden="true" />
-              Delete ({selectedCount})
+              <RotateCw
+                className={cn("size-3.5", reseeding && "animate-spin")}
+                aria-hidden="true"
+              />
+              {reseeding ? "Reseeding…" : "Reseed defaults"}
             </Button>
-          )}
-          <Button size="sm" onClick={() => openCreate()}>
-            <Plus className="size-3.5" aria-hidden="true" />
-            Add permission
-          </Button>
+            <Button size="sm" onClick={() => openCreate()}>
+              <Plus className="size-3.5" aria-hidden="true" />
+              Add permission
+            </Button>
+          </div>
         </div>
-      </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-full max-w-xs">
@@ -411,219 +484,147 @@ export function HubPermissionsPage() {
             aria-label="Search permissions"
           />
         </div>
-        {/* <Select value={moduleFilter} onValueChange={setModuleFilter}>
-          <SelectTrigger className="h-9 w-40" aria-label="Filter by module">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All modules</SelectItem>
-            {PERMISSION_HUB.modules.module.map((m) => (
-              <SelectItem key={m} value={m} className="capitalize">
-                {m}
-              </SelectItem>
-            ))}
-            {PERMISSION_HUB.flatMap((category) =>
-  category.modules.map((m) => (
-    <SelectItem key={m.module} value={m.module}>
-      {m.label}
-    </SelectItem>
-  ))
-)}
-          </SelectContent>
-        </Select> */}
         <span className="ml-auto text-xs text-muted-foreground">
-          {total} permission{total === 1 ? "" : "s"} ·{" "}
-          {groups.reduce((n, g) => n + g.modules.length, 0)} modules
+          {totalCategories} categor{totalCategories === 1 ? "y" : "ies"} · Page{" "}
+          {page} of {totalPages}
         </span>
       </div>
 
       {error?.status === 403 ? (
         <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border py-16 text-center">
-          <ShieldCheck
-            className="size-8 text-muted-foreground"
-            aria-hidden="true"
-          />
+          <ShieldCheck className="size-8 text-muted-foreground" aria-hidden="true" />
           <p className="text-sm font-medium text-foreground">
             You don't have access to permissions
           </p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            {error.message}
-          </p>
+          <p className="max-w-sm text-sm text-muted-foreground">{error.message}</p>
         </div>
-      ) : isLoading && rows.length === 0 ? (
+      ) : isLoading && categories.length === 0 ? (
         <div className="flex flex-col gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-32 w-full rounded-xl" />
           ))}
         </div>
-      ) : rows.length === 0 ? (
+      ) : categories.length === 0 ? (
         <div className="flex h-40 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border text-center">
-          <KeyRound
-            className="size-6 text-muted-foreground"
-            aria-hidden="true"
-          />
+          <KeyRound className="size-6 text-muted-foreground" aria-hidden="true" />
           <p className="text-sm text-muted-foreground">
-            {q || moduleFilter !== "all"
-              ? "No permissions match your filters."
-              : "No permissions yet."}
+            {q ? "No permissions match your search." : "No permissions yet."}
           </p>
-          {!q && moduleFilter === "all" && (
-            <Button variant="outline" size="sm" onClick={() => openCreate()}>
-              <Plus className="size-3.5" aria-hidden="true" />
-              Create your first permission
-            </Button>
+          {!q && (
+            <div className="mt-1 flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleReseed} disabled={reseeding}>
+                <RotateCw className={cn("size-3.5", reseeding && "animate-spin")} aria-hidden="true" />
+                Reseed defaults
+              </Button>
+              <Button size="sm" onClick={() => openCreate()}>
+                <Plus className="size-3.5" aria-hidden="true" />
+                Add permission
+              </Button>
+            </div>
           )}
         </div>
       ) : (
-        <div className="flex flex-col gap-6">
-          {groups.map(({ category, modules }) => {
-            const categoryDocs = modules.flatMap((m) => m.docs);
-            const isCollapsed = Boolean(collapsed[category]);
-            return (
-              <div key={category} className="flex flex-col gap-3">
-                <button
-                  type="button"
-                  onClick={() => toggleCategory(category)}
-                  className="flex items-center gap-2 text-left"
-                >
-                  <ChevronDown
-                    className={`size-4 shrink-0 text-muted-foreground transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
-                    aria-hidden="true"
-                  />
-                  <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground">
-                    {titleCase(category)}
-                  </h2>
-                  <span className="text-xs text-muted-foreground">
-                    {modules.length} module{modules.length === 1 ? "" : "s"} ·{" "}
-                    {categoryDocs.length} permission
-                    {categoryDocs.length === 1 ? "" : "s"}
-                  </span>
-                </button>
-
-                {!isCollapsed && (
-                  <div className="grid grid-cols-1 gap-3">
-                    {modules.map(({ moduleName, docs }) => {
-                      const moduleAllSelected = docs.every(
-                        (d) => rowSelection[d._id],
-                      );
-                      const moduleSomeSelected = docs.some(
-                        (d) => rowSelection[d._id],
-                      );
-                      const activeCount = docs.filter((d) => d.isActive).length;
-                      return (
-                        <div
-                          key={moduleName}
-                          className="flex flex-col gap-2 rounded-xl border border-border p-3"
-                        >
-                          <div className="flex items-center gap-2">
-                            <Checkbox
-                              checked={
-                                moduleAllSelected ||
-                                (moduleSomeSelected && "indeterminate")
-                              }
-                              onCheckedChange={() => toggleModuleGroup(docs)}
-                              aria-label={`Select all ${moduleName} permissions`}
-                            />
-                            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted">
-                              <Layers
-                                className="size-4 text-muted-foreground"
-                                aria-hidden="true"
-                              />
-                            </div>
-                            <div className="flex min-w-0 flex-col">
-                              <span className="truncate text-sm font-medium capitalize text-foreground">
-                                {titleCase(moduleName)}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {activeCount}/{docs.length} active
-                              </span>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="ml-auto size-7"
-                              aria-label={`Add action to ${moduleName}`}
-                              onClick={() =>
-                                openCreate({ module: moduleName, category })
-                              }
-                            >
-                              <Plus className="size-3.5" aria-hidden="true" />
-                            </Button>
-                          </div>
-
-                          <div className="flex flex-row gap-2 divide-x">
-                            {docs.map((doc) => (
-                              <div
-                                key={doc._id}
-                                className="flex items-center gap-2 px-1.5 first:pt-0 last:pb-0"
-                              >
-                                {/* <Checkbox
-                                  checked={Boolean(rowSelection[doc._id])}
-                                  onCheckedChange={() => toggleRow(doc._id)}
-                                  aria-label={`Select ${doc.label}`}
-                                /> */}
-                                <Badge
-                                  variant="outline"
-                                  className={`w-16 shrink-0 justify-center capitalize ${ACTION_STYLES[doc.action] ?? ""}`}
-                                >
-                                  {doc.action || "—"}
-                                </Badge>
-                                {/* <div className="flex min-w-0 flex-1 flex-col">
-                                  <span className="flex items-center gap-1.5 truncate text-sm text-foreground">
-                                    {doc.label || doc.key}
-                                    {doc.isSystem && (
-                                      <ShieldCheck
-                                        className="size-3 shrink-0 text-muted-foreground"
-                                        aria-hidden="true"
-                                      />
-                                    )}
-                                  </span>
-                                  <span className="truncate text-xs text-muted-foreground">{doc.key}</span>
-                                </div> */}
-                                {/* <Switch
-                                  checked={doc.isActive}
-                                  onCheckedChange={() => toggleActive(doc)}
-                                  aria-label={`Toggle ${doc.label}`}
-                                /> */}
-                                {/* <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="size-7"
-                                      aria-label={`Actions for ${doc.label}`}
-                                    >
-                                      <MoreHorizontal className="size-4" aria-hidden="true" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => openEdit(doc)}>
-                                      <Pencil className="size-4" aria-hidden="true" />
-                                      Edit
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      variant="destructive"
-                                      disabled={doc.isSystem}
-                                      onClick={() => setDeleteTarget(doc)}
-                                    >
-                                      <Trash2 className="size-4" aria-hidden="true" />
-                                      {doc.isSystem ? "System (locked)" : "Delete"}
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu> */}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
+        <>
+          <Accordion
+            key={`${page}:${q}`}
+            type="multiple"
+            defaultValue={categories.map((c) => c.category)}
+            className="flex flex-col gap-3"
+          >
+            {categories.map(({ category, modules, moduleCount, permissionCount, activeCount }) => (
+              <AccordionItem
+                key={category}
+                value={category}
+                className="rounded-xl border border-border bg-card/50 px-4 last:border-b"
+              >
+                <AccordionTrigger className="hover:no-underline">
+                  <div className="flex flex-1 items-center gap-3">
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground">
+                      {titleCase(category)}
+                    </h2>
+                    <Badge variant="secondary" className="font-normal">
+                      {moduleCount} module{moduleCount === 1 ? "" : "s"}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {activeCount}/{permissionCount} active
+                    </span>
                   </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="flex flex-col gap-2">
+                    {(modules ?? []).map((m) => (
+                      <PermissionModuleCard
+                        key={m.module}
+                        moduleName={m.module}
+                        docs={m.permissions ?? []}
+                        activeCount={m.activeCount ?? 0}
+                        selection={rowSelection}
+                        onToggleModule={toggleModuleGroup}
+                        onAddAction={() =>
+                          openCreate({ module: m.module, category })
+                        }
+                        onEditDoc={openEdit}
+                      />
+                    ))}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <span className="text-xs text-muted-foreground">
+                Page {page} of {totalPages}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-8"
+                  aria-label="Previous page"
+                  disabled={page <= 1 || isValidating}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="size-4" aria-hidden="true" />
+                </Button>
+                {pageNumbers.map((p, i) =>
+                  p === "…" ? (
+                    <span
+                      key={`ellipsis-${i}`}
+                      className="px-1 text-sm text-muted-foreground"
+                    >
+                      …
+                    </span>
+                  ) : (
+                    <Button
+                      key={p}
+                      variant={p === page ? "default" : "outline"}
+                      size="icon"
+                      className="size-8"
+                      aria-label={`Page ${p}`}
+                      aria-current={p === page ? "page" : undefined}
+                      disabled={isValidating}
+                      onClick={() => setPage(p)}
+                    >
+                      {p}
+                    </Button>
+                  ),
                 )}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-8"
+                  aria-label="Next page"
+                  disabled={page >= totalPages || isValidating}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  <ChevronRight className="size-4" aria-hidden="true" />
+                </Button>
               </div>
-            );
-          })}
-        </div>
+            </div>
+          )}
+        </>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -778,8 +779,8 @@ export function HubPermissionsPage() {
               {deleteTarget === "bulk" && selectedSystemCount > 0
                 ? `${selectedSystemCount} system permission${selectedSystemCount === 1 ? "" : "s"} in your selection can't be deleted and will be skipped. `
                 : ""}
-              This removes the permission from every role it's currently
-              attached to. This action cannot be undone.
+              This removes the permission from every role it's currently attached
+              to. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -804,10 +805,10 @@ export function HubPermissionsPage() {
       <PermissionSelectSheet
         open={permissionForm}
         onOpenChange={setPermissionForm}
-        existingKeys={existingKeys}
         onCreated={mutate}
       />
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }
 
