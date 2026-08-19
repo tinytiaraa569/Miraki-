@@ -15,7 +15,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
-import { useSellerAuth } from "@/hooks/use-seller-auth"
+import { hasPermission, useHubAuth } from "@/hooks/use-hub-auth"
 import { fetcher } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
@@ -35,17 +35,20 @@ function StatCard({ icon: Icon, label, value, hint }) {
 }
 
 const QUICK_LINKS = [
-  { title: "Products", desc: "Catalog, categories, brands and variants", url: "/hub/products", icon: Boxes },
-  { title: "Diamonds", desc: "Diamond catalog, option and filter sets", url: "/hub/diamonds", icon: Gem },
-  { title: "Orders", desc: "Orders, B2B enquiries and checkouts", url: "/hub/orders", icon: ShoppingCart },
-  { title: "Marketing", desc: "Coupons, discounts and subscribers", url: "/hub/marketing/tools", icon: Megaphone },
-  { title: "Customers", desc: "Customers, groups and wishlists", url: "/hub/customers", icon: Users },
-  { title: "My Stores", desc: "Main store and substores overview", url: "/hub/stores", icon: Store },
+  { title: "Products", desc: "Catalog, categories, brands and variants", url: "/hub/products", icon: Boxes, module: "product" },
+  { title: "Diamonds", desc: "Diamond catalog, option and filter sets", url: "/hub/diamonds", icon: Gem, module: "diamond" },
+  { title: "Orders", desc: "Orders, B2B enquiries and checkouts", url: "/hub/orders", icon: ShoppingCart, module: "order" },
+  { title: "Marketing", desc: "Coupons, discounts and subscribers", url: "/hub/marketing/tools", icon: Megaphone, module: "marketing_tool" },
+  { title: "Customers", desc: "Customers, groups and wishlists", url: "/hub/customers", icon: Users, module: "customer" },
+  { title: "My Stores", desc: "Main store and substores overview", url: "/hub/stores", icon: Store, module: "main_store" },
 ]
 
 export function HubOverviewPage() {
-  const { user, seller, isOwner } = useSellerAuth()
+  const { user, seller, isOwner, permissions } = useHubAuth()
   const { data: hub, isLoading } = useSWR("/seller/hub", fetcher, { revalidateOnFocus: false })
+  const quickLinks = isOwner
+    ? QUICK_LINKS
+    : QUICK_LINKS.filter((link) => hasPermission(permissions, link.module, "read"))
 
   const stats = hub?.stats ?? {}
   const stores = hub?.stores ?? []
@@ -84,7 +87,7 @@ export function HubOverviewPage() {
           Jump to a module
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {QUICK_LINKS.map((link) => (
+          {quickLinks.map((link) => (
             <Link
               key={link.url}
               to={link.url}
@@ -112,9 +115,11 @@ export function HubOverviewPage() {
           <h2 id="stores-heading" className="text-sm font-semibold text-foreground">
             Your stores
           </h2>
-          <Link to="/hub/stores" className="text-xs font-medium text-primary hover:underline">
-            Manage stores
-          </Link>
+          {isOwner || hasPermission(permissions, "main_store", "read") ? (
+            <Link to="/hub/stores" className="text-xs font-medium text-primary hover:underline">
+              Manage stores
+            </Link>
+          ) : null}
         </div>
         <Card>
           <CardContent className="p-0">

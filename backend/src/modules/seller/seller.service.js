@@ -4,9 +4,11 @@ import { InviteToken } from "../../models/inviteToken.model.js"
 import { UserDirectory } from "../../models/userDirectory.model.js"
 import { Seller } from "../sellers/seller.model.js"
 import { ApiError } from "../../utils/apiError.js"
-import { randomToken, sha256, verifyPassword } from "../../utils/crypto.js"
+import { randomToken, sha256, verifyPassword, verifyPasswordDecoy } from "../../utils/crypto.js"
 import { deleteSellerImage, saveSellerImage } from "../../utils/uploads.js"
 import { audit } from "../audit/audit.service.js"
+import { getSellerTheme } from "../theme/theme.service.js"
+import { resolveEffectivePermissions } from "../../utils/permissions.js"
 
 const MAX_FAILED_ATTEMPTS = 5
 const LOCKOUT_MS = 15 * 60 * 1000
@@ -14,6 +16,65 @@ const LOCKOUT_MS = 15 * 60 * 1000
 // Generic error — never reveal whether the email exists, which tenant it
 // belongs to, or which field failed.
 const INVALID = () => new ApiError(401, "Invalid credentials")
+
+function normalizeEmail(email) {
+  return String(email).trim().toLowerCase()
+}
+
+async function resolveLoginDirectory(email) {
+  const [resolved] = await UserDirectory.aggregate([
+    { $match: { email } },
+    {
+      $lookup: {
+        from: "sellers",
+        let: { sellerId: "$sellerId" },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ["$_id", "$$sellerId"] },
+              status: "active",
+              deletedAt: null,
+            },
+          },
+          {
+            $project: {
+              businessName: 1,
+              dbName: 1,
+              mainStoreId: 1,
+              multistoreEnabled: 1,
+              ownerEmail: 1,
+              profile: 1,
+              status: 1,
+              deletedAt: 1,
+            },
+          },
+        ],
+        as: "seller",
+      },
+    },
+    { $unwind: "$seller" },
+    { $project: { _id: 0, userId: 1, sellerId: 1, seller: 1 } },
+  ])
+  return resolved ?? null
+}
+
+async function recordFailedLogin({ user, req, sellerId, accountType }) {
+  user.failedLoginAttempts = (user.failedLoginAttempts ?? 0) + 1
+  if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
+    user.lockedUntil = new Date(Date.now() + LOCKOUT_MS)
+    user.failedLoginAttempts = 0
+    await audit({
+      req,
+      actorId: user._id,
+      actorRole: accountType === "storeAdmin" ? "STORE_ADMIN" : user.role,
+      sellerId,
+      action: accountType === "storeAdmin" ? "storeadmin.auth.lockout" : "seller.auth.lockout",
+      targetType: accountType === "storeAdmin" ? "StoreAdmin" : "StoreUser",
+      targetId: user._id,
+    })
+  }
+  await user.save()
+}
 
 // ---------------------------------------------------------------------------
 // SELLER-SIDE LOGIN (store users: owner + substore admins).
@@ -24,30 +85,57 @@ const INVALID = () => new ApiError(401, "Invalid credentials")
 // client never says which tenant it belongs to.
 // ---------------------------------------------------------------------------
 export async function verifySellerLogin({ email, password, req }) {
-  const entry = await UserDirectory.findOne({ email: email.toLowerCase() }).lean()
-  if (!entry) throw INVALID()
+  const normalizedEmail = normalizeEmail(email)
+  const resolved = await resolveLoginDirectory(normalizedEmail)
+  if (!resolved) {
+    // Anti-enumeration: spend the same argon2 time a real wrong-password attempt
+    // would, so response timing can't reveal whether this email is registered.
+    await verifyPasswordDecoy(password)
+    throw INVALID()
+  }
 
-  const seller = await Seller.findById(entry.sellerId).lean()
-  if (!seller || seller.status !== "active" || seller.deletedAt) throw INVALID()
+  const seller = resolved.seller
+  seller._id = resolved.sellerId
+  const { StoreUser, StoreAdmin, Role } = getTenantModels(seller.dbName)
 
-  const { StoreUser } = getTenantModels(seller.dbName)
-  const user = await StoreUser.findById(entry.userId).select("+passwordHash")
-  if (!user || !user.passwordHash) throw INVALID()
+  // The existing directory remains the single login index. The referenced id
+  // must resolve to exactly one matching tenant account; client input can never
+  // choose the account type, seller, tenant, role, or permissions.
+  const [storeUser, storeAdmin] = await Promise.all([
+    StoreUser.findOne({ _id: resolved.userId, email: normalizedEmail }).select("+passwordHash"),
+    StoreAdmin.findOne({
+      _id: resolved.userId,
+      email: normalizedEmail,
+      isDeleted: false,
+      deletedAt: null,
+    }).select("+passwordHash"),
+  ])
+
+  if (Boolean(storeUser) === Boolean(storeAdmin)) throw INVALID()
+
+  const accountType = storeAdmin ? "storeAdmin" : "storeUser"
+  const user = storeAdmin ?? storeUser
+  if (!user.passwordHash) throw INVALID()
 
   if (user.lockedUntil && user.lockedUntil > new Date()) {
     throw new ApiError(429, "Account temporarily locked. Try again later.")
   }
   if (user.status !== "active") throw INVALID()
 
+  let role = null
+  if (accountType === "storeAdmin") {
+    role = await Role.findOne({
+      _id: user.roleId,
+      sellerId: resolved.sellerId,
+      status: "active",
+      isDeleted: false,
+    }).select("slug displayName permissions").lean()
+    if (!role) throw INVALID()
+  }
+
   const ok = await verifyPassword(user.passwordHash, password)
   if (!ok) {
-    user.failedLoginAttempts += 1
-    if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
-      user.lockedUntil = new Date(Date.now() + LOCKOUT_MS)
-      user.failedLoginAttempts = 0
-      await audit({ req, actorId: user._id, actorRole: user.role, sellerId: seller._id, action: "seller.auth.lockout", targetType: "StoreUser", targetId: user._id })
-    }
-    await user.save()
+    await recordFailedLogin({ user, req, sellerId: resolved.sellerId, accountType })
     throw INVALID()
   }
 
@@ -55,8 +143,78 @@ export async function verifySellerLogin({ email, password, req }) {
   user.lockedUntil = null
   await user.save()
 
-  await audit({ req, actorId: user._id, actorRole: user.role, sellerId: seller._id, action: "seller.auth.login", targetType: "StoreUser", targetId: user._id })
-  return { user, seller }
+  await audit({
+    req,
+    actorId: user._id,
+    actorRole: accountType === "storeAdmin" ? "STORE_ADMIN" : user.role,
+    sellerId: resolved.sellerId,
+    action: accountType === "storeAdmin" ? "storeadmin.auth.login" : "seller.auth.login",
+    targetType: accountType === "storeAdmin" ? "StoreAdmin" : "StoreUser",
+    targetId: user._id,
+  })
+
+  return { user, seller, accountType, role }
+}
+
+function sellerIdentityPayload(seller) {
+  return {
+    id: seller._id,
+    businessName: seller.businessName,
+    multistoreEnabled: seller.multistoreEnabled,
+    mainStoreId: seller.mainStoreId,
+    profile: seller.profile ?? {},
+  }
+}
+
+export async function buildHubBootstrap({ user, seller, accountType, role = null }) {
+  let permissionPromise = Promise.resolve(["*"])
+  let rolePromise = Promise.resolve(role)
+
+  if (accountType === "storeAdmin") {
+    const { Role, Permission } = getTenantModels(seller.dbName)
+    rolePromise = role
+      ? Promise.resolve(role)
+      : Role.findOne({
+          _id: user.roleId,
+          sellerId: seller._id,
+          status: "active",
+          isDeleted: false,
+        }).select("slug displayName permissions").lean().exec()
+
+    permissionPromise = rolePromise.then(async (activeRole) => {
+      if (!activeRole) throw new ApiError(403, "Forbidden")
+      const permissions = await resolveEffectivePermissions({ Permission, role: activeRole, user })
+      return permissions.map((permission) => permission.key)
+    })
+  }
+
+  const [activeRole, permissions, branding, theme] = await Promise.all([
+    rolePromise,
+    permissionPromise,
+    getSellerBranding({ seller }),
+    getSellerTheme({ seller }),
+  ])
+
+  const isStoreAdmin = accountType === "storeAdmin"
+  const isOwner = !isStoreAdmin && user.role === "SELLER_SUPERADMIN"
+  const identity = {
+    accountType,
+    user: isStoreAdmin
+      ? {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: activeRole?.slug ?? activeRole?.displayName ?? "store_admin",
+          roleId: user.roleId,
+        }
+      : { id: user._id, email: user.email, role: user.role, storeId: user.storeId },
+    seller: sellerIdentityPayload(seller),
+    scope: isStoreAdmin ? "permission-based" : isOwner ? "all-stores" : "single-store",
+    menu: isStoreAdmin ? [] : isOwner ? ["overview", "stores", "team", "profile"] : ["overview"],
+    permissions,
+  }
+
+  return { identity, branding, theme }
 }
 
 // ---------------------------------------------------------------------------
@@ -65,12 +223,31 @@ export async function verifySellerLogin({ email, password, req }) {
 // active. Queries run inside the tenant's own database.
 // ---------------------------------------------------------------------------
 
-export async function getHubOverview({ seller, tenantDbName, user }) {
-  const { Store, StoreUser } = getTenantModels(tenantDbName)
+export async function getHubOverview({ seller, tenantDbName, user, userType }) {
+  const { Store, StoreUser, Role } = getTenantModels(tenantDbName)
 
   const isOwner = user.role === "SELLER_SUPERADMIN"
-  // Substore-level users only ever see their own store.
-  const storeMatch = isOwner ? {} : { _id: user.storeId ?? seller.mainStoreId }
+  const isStoreAdmin = userType === "storeAdmin"
+
+  // Determine store access based on role dataAccess
+  let storeMatch = {}
+  if (isOwner) {
+    storeMatch = {}
+  } else if (isStoreAdmin && user.roleId) {
+    // For StoreAdmin, check their role's dataAccess
+    const role = await Role.findById(user.roleId).select("dataAccess substoreIds").lean()
+    if (role?.dataAccess === "all_substores") {
+      storeMatch = {}
+    } else if (role?.dataAccess === "multiple_substores" && role.substoreIds?.length) {
+      storeMatch = { _id: { $in: role.substoreIds } }
+    } else {
+      // own_substore or default: only their assigned store
+      storeMatch = { _id: user.storeId ?? seller.mainStoreId }
+    }
+  } else {
+    // StoreUser (non-owner): only their assigned store
+    storeMatch = { _id: user.storeId ?? seller.mainStoreId }
+  }
 
   // Aggregation pipelines: project ONLY the fields the Hub renders (no
   // timestamps/audit/internal fields over the wire) and compute the substore
@@ -86,7 +263,7 @@ export async function getHubOverview({ seller, tenantDbName, user }) {
         },
       },
     ]),
-    isOwner ? StoreUser.aggregate([{ $count: "n" }]) : Promise.resolve(null),
+    (isOwner || isStoreAdmin) ? StoreUser.aggregate([{ $count: "n" }]) : Promise.resolve(null),
   ])
 
   const { stores = [], counts = [] } = storeRows[0] ?? {}
@@ -103,7 +280,7 @@ export async function getHubOverview({ seller, tenantDbName, user }) {
     stats: {
       totalStores: stores.length,
       subStores,
-      teamMembers: isOwner ? (teamAgg?.[0]?.n ?? 0) : null,
+      teamMembers: (isOwner || isStoreAdmin) ? (teamAgg?.[0]?.n ?? 0) : null,
     },
     stores,
   }
@@ -182,7 +359,8 @@ export async function inviteStoreUser({ seller, tenantDbName, user, storeId, ema
   const store = await Store.findById(storeId)
   if (!store) throw new ApiError(404, "Store not found")
 
-  const emailTaken = await UserDirectory.findOne({ email: email.toLowerCase() })
+  const normalizedEmail = email.trim().toLowerCase()
+  const emailTaken = await UserDirectory.findOne({ email: normalizedEmail })
   if (emailTaken) throw new ApiError(409, "This email is already in use")
 
   const session = await mongoose.startSession()
@@ -196,7 +374,7 @@ export async function inviteStoreUser({ seller, tenantDbName, user, storeId, ema
             mainStoreId: seller.mainStoreId,
             storeId: store._id,
             role,
-            email,
+            email: normalizedEmail,
             status: "invited",
             createdBy: user._id,
             createdByModel: "StoreUser",
@@ -205,7 +383,7 @@ export async function inviteStoreUser({ seller, tenantDbName, user, storeId, ema
         { session },
       )
 
-      await UserDirectory.create([{ email, sellerId: seller._id, userId: invited._id }], { session })
+      await UserDirectory.create([{ email: normalizedEmail, sellerId: seller._id, userId: invited._id }], { session })
 
       const inviteToken = randomToken(32)
       await InviteToken.create(
@@ -235,7 +413,7 @@ export async function inviteStoreUser({ seller, tenantDbName, user, storeId, ema
     action: "seller.user.invited",
     targetType: "StoreUser",
     targetId: result.invited._id,
-    after: { email, role, storeId: store._id },
+    after: { email: normalizedEmail, role, storeId: store._id },
   })
 
   // Dev only: returned so the flow can be tested; production emails it.

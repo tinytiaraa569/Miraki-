@@ -1,8 +1,5 @@
-import { env } from "../../config/env.js"
-import { StoreAdmin } from "./storeadmin.model.js"
 import { audit } from "../audit/audit.service.js"
 import { asyncHandler } from "../../utils/asyncHandler.js"
-import { verifyStoreAdminLogin } from "./storeadmin.service.js"
 import {
   clearAuthCookies,
   createSession,
@@ -14,49 +11,21 @@ import {
   verifyAccessToken,
 } from "../auth/token.service.js"
 import { hashPassword, verifyPassword } from "../../utils/crypto.js"
-// import { beginEnrollment, signPreauthToken, verifyPreauthToken, verifyTotpCode } from "./totp.storeadmin.service.js"
 import { resolveEffectivePermissions , buildMenuFromPermissions } from "../../utils/permissions.js"
-import { beginEnrollment, signPreauthToken, verifyPreauthToken, verifyTotpCode } from "./totp.storeadmin.service.js"
+import { beginEnrollment, verifyPreauthToken, verifyTotpCode } from "./totp.storeadmin.service.js"
 import { getTenantModels } from "../../config/tenantDb.js"
+import { Seller } from "../sellers/seller.model.js"
+import { buildHubBootstrap } from "../seller/seller.service.js"
 
 const PREAUTH_COOKIE = "preauth_token"
-const PREAUTH_PATH = "/api/seller/store-admins/auth"
-
-function setPreauthCookie(res, token) {
-  res.cookie(PREAUTH_COOKIE, token, {
-    httpOnly: true,
-    secure: env.NODE_ENV === "production",
-    sameSite: env.NODE_ENV === "production" ? "strict" : "lax",
-    path: PREAUTH_PATH,
-    maxAge: 5 * 60 * 1000,
-  })
-}
-
-
-export const login = asyncHandler(async (req, res) => {
-  const { email, password } = req.body
-  const { user, seller } = await verifyStoreAdminLogin({ email, password, req })
-
-  if (!user.twoFactorRequired && !user.totpEnabled) {
-    const { accessToken, refreshToken } = await createSession({
-      userId: user._id,
-      userType: "storeAdmin",
-      sellerId: seller._id,
-      req,
-    })
-    setAuthCookies(res, { accessToken, refreshToken })
-    return res.json({ twoFactorRequired: false })
-  }
-
-  const mode = user.totpEnabled ? "verify" : "enroll"
-  setPreauthCookie(res, signPreauthToken({ userId: user._id, mode, sellerId: seller._id }))
-  res.json({ twoFactorRequired: true, mode })
-})
-
 export const setup2fa = asyncHandler(async (req, res) => {
   const token = req.cookies?.[PREAUTH_COOKIE]
   if (!token) return res.status(401).json({ error: "Login step required" })
   const payload = verifyPreauthToken(token)
+  // The enrollment QR is only served during first-time enrollment. A "verify"
+  // preauth token (issued when 2FA is already enrolled) must never be able to
+  // rebind a fresh authenticator — that would be an account takeover.
+  if (payload.mode !== "enroll") return res.status(409).json({ error: "2FA already enrolled" })
 
   const { qrDataUrl, secret } = await beginEnrollment({ userId: payload.userId, sellerId: payload.sellerId })
   res.json({ qrDataUrl, secret })
@@ -68,27 +37,51 @@ export const verify2fa = asyncHandler(async (req, res) => {
   const payload = verifyPreauthToken(token)
 
   const { code } = req.body
-  const user = await verifyTotpCode({ userId: payload.userId, sellerId: payload.sellerId, code })
+  const { user, enrolled } = await verifyTotpCode({
+    userId: payload.userId,
+    sellerId: payload.sellerId,
+    code,
+    mode: payload.mode,
+  })
 
   await audit({
     req,
     actorId: user._id,
     actorRole: "STORE_ADMIN",
     sellerId: payload.sellerId,
-    action: "auth.2fa_verified",
+    action: enrolled ? "auth.2fa_enrolled" : "auth.2fa_verified",
     targetType: "StoreAdmin",
     targetId: user._id,
   })
+  // A brand-new authenticator was just bound to this account. Surface it loudly
+  // so an enrollment takeover (someone with only the password binding THEIR own
+  // authenticator) is detectable. TODO: also email user.email once mail infra
+  // exists — there is no mailer in the codebase today.
+  if (enrolled) {
+    console.warn(
+      `[server] SECURITY: new 2FA enrollment for StoreAdmin ${user._id} (seller ${payload.sellerId})`,
+    )
+  }
 
-  const { accessToken, refreshToken } = await createSession({
-    userId: user._id,
-    userType: "storeAdmin",
-    sellerId: payload.sellerId,
-    req,
-  })
-  res.clearCookie(PREAUTH_COOKIE, { path: PREAUTH_PATH })
+  const seller = await Seller.findOne({
+    _id: payload.sellerId,
+    status: "active",
+    deletedAt: null,
+  }).lean()
+  if (!seller) return res.status(401).json({ error: "Invalid pre-auth token" })
+
+  const [{ accessToken, refreshToken }, bootstrap] = await Promise.all([
+    createSession({
+      userId: user._id,
+      userType: "storeAdmin",
+      sellerId: payload.sellerId,
+      req,
+    }),
+    buildHubBootstrap({ user, seller, accountType: "storeAdmin" }),
+  ])
+  res.clearCookie(PREAUTH_COOKIE, { path: "/api/seller" })
   setAuthCookies(res, { accessToken, refreshToken })
-  res.json({ ok: true })
+  res.json({ ok: true, accountType: "storeAdmin", bootstrap })
 })
 
 
@@ -153,6 +146,7 @@ export const me = asyncHandler(async (req, res) => {
 export const changePassword = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body
 
+  const { StoreAdmin } = getTenantModels(req.tenantDbName)
   const user = await StoreAdmin.findById(req.user._id).select("+passwordHash")
   if (!user) return res.status(401).json({ error: "Not authenticated" })
 
@@ -207,6 +201,7 @@ export const enableTwoFactor = asyncHandler(async (req, res) => {
 // future re-enable performs a fresh enrollment with a new QR code.
 export const disableTwoFactor = asyncHandler(async (req, res) => {
   const user = req.user
+  const { StoreAdmin } = getTenantModels(req.tenantDbName)
   user.twoFactorRequired = false
   user.totpEnabled = false
   await StoreAdmin.updateOne(

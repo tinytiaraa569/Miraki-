@@ -4,7 +4,9 @@ const userDirectorySchema = new mongoose.Schema(
   {
     email: { type: String, required: true, lowercase: true, trim: true },
     sellerId: { type: mongoose.Schema.Types.ObjectId, ref: "Seller", required: true },
-    userId: { type: mongoose.Schema.Types.ObjectId, required: true }, // StoreUser _id inside the tenant DB
+    // References either a StoreUser or StoreAdmin in the resolved tenant DB.
+    // Account type is derived server-side by exact _id + email lookup.
+    userId: { type: mongoose.Schema.Types.ObjectId, required: true },
   },
   { timestamps: true },
 )

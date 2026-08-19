@@ -20,6 +20,11 @@ export const ACTION_LABELS = {
 
 export const DEFAULT_PERMISSION_CATALOG = [
   {
+    category: "dashboard",
+    label: "Dashboard",
+    modules: [{ module: "dashboard", label: "Dashboard", actions: ["read"] }],
+  },
+  {
     category: "stores",
     label: "Stores",
     modules: [
@@ -28,6 +33,7 @@ export const DEFAULT_PERMISSION_CATALOG = [
       { module: "store_variant", label: "Store Variants", actions: [...DEFAULT_ACTIONS, "export"] },
       { module: "store_permission", label: "Store Permissions" },
       { module: "store_role", label: "Store Roles" },
+      { module: "store_admin", label: "Store Admins" },
     ],
   },
   {
@@ -140,7 +146,7 @@ export const DEFAULT_PERMISSION_CATALOG = [
     category: "settings",
     label: "Settings",
     modules: [
-      { module: "general_setting", label: "General", actions: READ_ONLY_ACTIONS },
+      { module: "general_setting", label: "General", actions: ["read", "write", "update", "manage"] },
       { module: "security_setting", label: "Security", actions: READ_ONLY_ACTIONS },
       { module: "payment_setting", label: "Payments", actions: READ_ONLY_ACTIONS },
     ],
@@ -151,6 +157,7 @@ export const DEFAULT_PERMISSION_CATALOG = [
     modules: [
       { module: "dashboard_appearance", label: "Dashboard Appearance", actions: READ_ONLY_ACTIONS },
       { module: "business_mode", label: "Business Mode", actions: READ_ONLY_ACTIONS },
+      { module: "metafield", label: "Metafields" },
     ],
   },
 ].map((cat) => ({

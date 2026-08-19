@@ -19,11 +19,10 @@ const NO_REFRESH_PATHS = [
   "/auth/logout",
   "/auth/refresh",
   "/seller/auth/login",
-  "/seller/store-admin/auth/login",
-  "/seller/store-admin/auth/me",
-  "/seller/store-admin/auth/2fa/setup",
-  "/seller/store-admin/auth/2fa/verify",
-  "/seller/store-admin/auth/logout"
+  "/seller/store-admins/auth/me",
+  "/seller/store-admins/auth/2fa/setup",
+  "/seller/store-admins/auth/2fa/verify",
+  "/seller/store-admins/auth/logout"
 ]
 
 // Single-flight silent refresh. The 15-min access token expires constantly;
@@ -61,9 +60,7 @@ async function request(path, options = {}, _retried = false) {
         const refreshed = await refreshSession()
         if (refreshed) return request(path, options, true)
       }
-      // Refresh failed → the session is genuinely dead (refresh token expired,
-      // revoked, or absent). Only NOW do we drop the cached auth state so
-      // ProtectedRoute redirects to login instead of showing a broken screen.
+
       if (path.startsWith("/seller/")) {
         globalMutate("/seller/me", { user: null }, { revalidate: false })
       } else {

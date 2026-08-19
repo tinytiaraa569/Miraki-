@@ -102,6 +102,55 @@ export async function deleteSellerImage({ sellerId, publicUrl }) {
 }
 
 // ---------------------------------------------------------------------------
+// GENERAL SETTINGS IMAGES — the store-wide General Settings singleton carries
+// a handful of branding assets (logo / mobile logo / favicon / under-construction
+// image). They are stored per-seller in their OWN `settings` folder so they sit
+// beside the seller's other uploads and are easy to reason about:
+//   uploads/seller/<sellerId>/settings/<file>  ->  /uploads/seller/<sellerId>/settings/<file>
+// The sellerId is a 24-hex ObjectId (validated) used as the directory name,
+// which prevents path traversal. ONLY the returned URL string is persisted.
+// ---------------------------------------------------------------------------
+// General Settings branding accepts every web-renderable image format — the
+// default image whitelist PLUS GIF and .ico (favicons). Scoped to THIS uploader
+// via parseDataUrl's `allowed` option, so brand/category/product uploads keep
+// the stricter default set.
+const SETTINGS_IMAGE_MIME = {
+  ...ALLOWED_MIME,
+  "image/gif": "gif",
+  "image/x-icon": "ico",
+  "image/vnd.microsoft.icon": "ico",
+}
+
+export async function saveSettingsImage({ sellerId, dataUrl }) {
+  assertSafeId(sellerId)
+  const { ext, buffer } = parseDataUrl(dataUrl, { allowed: SETTINGS_IMAGE_MIME })
+
+  const dir = path.join(UPLOADS_ROOT, "seller", String(sellerId), "settings")
+  await mkdir(dir, { recursive: true })
+
+  const filename = `${Date.now()}_${randomBytes(6).toString("hex")}.${ext}`
+  await writeFile(path.join(dir, filename), buffer)
+
+  return `/uploads/seller/${sellerId}/settings/${filename}`
+}
+
+// Best-effort removal of a General Settings image (e.g. a replaced favicon).
+// Only files under this seller's own settings folder are eligible, and the path
+// is shape-checked against traversal.
+export async function deleteSettingsImage({ sellerId, publicUrl }) {
+  assertSafeId(sellerId)
+  if (typeof publicUrl !== "string") return
+  if (!publicUrl.startsWith(`/uploads/seller/${sellerId}/settings/`)) return
+  const rel = publicUrl.slice("/uploads/".length)
+  if (!/^[a-z0-9/_.-]+$/i.test(rel) || rel.includes("..")) return
+  try {
+    await unlink(path.join(UPLOADS_ROOT, rel))
+  } catch {
+    // already gone — fine
+  }
+}
+
+// ---------------------------------------------------------------------------
 // CATEGORY IMAGES — stored per-category so a category's assets live together
 // and are cleaned up wholesale when it is permanently deleted:
 //   uploads/category/<categoryId>/<file>   ->  /uploads/category/<categoryId>/<file>

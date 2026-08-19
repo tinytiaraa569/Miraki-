@@ -1,6 +1,6 @@
 import { Router } from "express"
 import { authenticate } from "../../middleware/authenticate.js"
-import { loadUser, requireRole } from "../../middleware/loadUser.js"
+import { loadUser, requireRole, requireStoreAccess } from "../../middleware/loadUser.js"
 import { validate } from "../../middleware/validate.js"
 import { readTheme, removeTheme, writeTheme } from "./theme.controller.js"
 import { saveThemeSchema } from "./theme.validation.js"
@@ -10,11 +10,11 @@ import { saveThemeSchema } from "./theme.validation.js"
 // loadUser (fresh tenant re-resolution per request) → role gate.
 export const themeRoutes = Router()
 
-const storeRoles = requireRole("SELLER_SUPERADMIN", "STORE_SUPERADMIN", "STORE_ADMIN")
+const storeAccess = requireStoreAccess()
 const ownerOnly = requireRole("SELLER_SUPERADMIN")
 
 // Every Hub user reads the theme — it must apply for the whole team.
-themeRoutes.get("/", authenticate, loadUser, storeRoles, readTheme)
+themeRoutes.get("/", authenticate, loadUser, storeAccess, readTheme)
 
 // Only the owner customizes or resets it.
 themeRoutes.put("/", authenticate, loadUser, ownerOnly, validate(saveThemeSchema), writeTheme)

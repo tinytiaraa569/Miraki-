@@ -157,6 +157,50 @@ export const TIMEZONES = [
   "Pacific/Auckland", "UTC",
 ]
 
+// GMT-offset labels for the store-wide "Default time zone" picker (General
+// Settings). Friendlier than raw IANA names and matches the StoreHippo-style UI
+// — the value stored IS the label (e.g. "GMT+5:30"). These are fixed offsets:
+// a store-wide display preference, not a DST-aware scheduler.
+// (Per-substore timezones keep the IANA `TIMEZONES` list above — they drive
+// per-region rendering and are seeded as IANA names on the backend.)
+export const GMT_OFFSETS = [
+  "GMT-12", "GMT-11", "GMT-10", "GMT-9:30", "GMT-9", "GMT-8", "GMT-7", "GMT-6",
+  "GMT-5", "GMT-4", "GMT-3:30", "GMT-3", "GMT-2", "GMT-1", "GMT+0", "GMT+1",
+  "GMT+2", "GMT+3", "GMT+3:30", "GMT+4", "GMT+4:30", "GMT+5", "GMT+5:30",
+  "GMT+5:45", "GMT+6", "GMT+6:30", "GMT+7", "GMT+8", "GMT+8:45", "GMT+9",
+  "GMT+9:30", "GMT+10", "GMT+10:30", "GMT+11", "GMT+12", "GMT+12:45", "GMT+13",
+  "GMT+14",
+]
+
+// Map the IANA zones we historically stored (see TIMEZONES) to their standard
+// GMT offset, so a settings doc saved before this change still shows the right
+// option. Display-only — nothing rewrites the stored value until the user edits.
+const IANA_TO_GMT = {
+  "Asia/Dubai": "GMT+4", "Asia/Riyadh": "GMT+3", "Asia/Muscat": "GMT+4",
+  "Asia/Kuwait": "GMT+3", "Asia/Qatar": "GMT+3", "Asia/Bahrain": "GMT+3",
+  "Asia/Kolkata": "GMT+5:30", "Asia/Karachi": "GMT+5", "Asia/Dhaka": "GMT+6",
+  "Asia/Colombo": "GMT+5:30", "Asia/Bangkok": "GMT+7", "Asia/Singapore": "GMT+8",
+  "Asia/Kuala_Lumpur": "GMT+8", "Asia/Jakarta": "GMT+7", "Asia/Manila": "GMT+8",
+  "Asia/Tokyo": "GMT+9", "Asia/Seoul": "GMT+9", "Asia/Shanghai": "GMT+8",
+  "Asia/Hong_Kong": "GMT+8", "Europe/London": "GMT+0", "Europe/Paris": "GMT+1",
+  "Europe/Berlin": "GMT+1", "Europe/Madrid": "GMT+1", "Europe/Rome": "GMT+1",
+  "Europe/Amsterdam": "GMT+1", "Europe/Stockholm": "GMT+1", "Europe/Istanbul": "GMT+3",
+  "Africa/Cairo": "GMT+2", "Africa/Lagos": "GMT+1", "Africa/Nairobi": "GMT+3",
+  "Africa/Johannesburg": "GMT+2", "America/New_York": "GMT-5", "America/Chicago": "GMT-6",
+  "America/Denver": "GMT-7", "America/Los_Angeles": "GMT-8", "America/Toronto": "GMT-5",
+  "America/Mexico_City": "GMT-6", "America/Sao_Paulo": "GMT-3", "Australia/Sydney": "GMT+10",
+  "Pacific/Auckland": "GMT+12", "UTC": "GMT+0",
+}
+
+// Resolve any stored timezone value to a GMT-offset label for display. Already-
+// GMT values pass through; legacy IANA names map via the table; anything else is
+// returned as-is so it's never silently dropped from the picker.
+export function toGmtOffset(value) {
+  if (!value) return ""
+  if (value.startsWith("GMT")) return value
+  return IANA_TO_GMT[value] || value
+}
+
 export const SOCIAL_PROVIDERS = [
   "Facebook", "Instagram", "X (Twitter)", "YouTube", "TikTok", "Snapchat",
   "LinkedIn", "Pinterest", "WhatsApp", "Telegram", "Threads",

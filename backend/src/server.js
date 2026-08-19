@@ -1,7 +1,7 @@
 import { connectDB } from "./config/db.js"
 import { env } from "./config/env.js"
 import { closeRedis } from "./config/redis.js"
-import { seedPlatformSuperadmin } from "./config/seed.js"
+import { seedPlatformSuperadmin, syncSellerLoginDirectory } from "./config/seed.js"
 import { ensureStorefrontTenant } from "./modules/storefront/storefront.service.js"
 import { app } from "./app.js"
 
@@ -12,6 +12,7 @@ async function main() {
   // Storefront demo tenant (substores + variants + canvas mapping). No-op
   // when STOREFRONT_TENANT_DB points at an already-seeded tenant.
   await ensureStorefrontTenant()
+  await syncSellerLoginDirectory()
   app.listen(env.PORT, () => {
     console.log(`[server] API listening on http://localhost:${env.PORT}`)
   })

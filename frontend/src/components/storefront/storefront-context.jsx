@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useMemo } from "react"
 import useSWR from "swr"
 import { fetcher } from "@/lib/api"
+import { UnderConstruction } from "./under-construction"
 
 const StorefrontContext = createContext(null)
 
@@ -40,6 +41,17 @@ export function StorefrontProvider({ children }) {
     dedupingInterval: 300_000,
   })
   const substores = listData?.substores ?? []
+
+  // Store-wide maintenance gate. When the merchant enables the under-construction
+  // page in General Settings, the whole public storefront is replaced by the
+  // maintenance screen. /hub is a separate route tree (never mounts this
+  // provider), so management stays reachable and the toggle can be switched off.
+  // Tiny, cached payload — busted server-side on Save, so it applies promptly.
+  const { data: site } = useSWR("/storefront/site", fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60_000,
+  })
+  const gate = site?.underConstruction
 
   // One shared formatter per substore — Intl construction is not free.
   const priceFormatter = useMemo(() => {
@@ -91,6 +103,12 @@ export function StorefrontProvider({ children }) {
     }),
     [data, substore, substores, isLoading, error, formatPrice, switchCountry],
   )
+
+  // All hooks run above; only now may we short-circuit. An enabled gate replaces
+  // the entire storefront (children never render) with the maintenance screen.
+  if (gate?.enabled) {
+    return <UnderConstruction imageUrl={gate.imageUrl} title={site?.title} />
+  }
 
   return <StorefrontContext.Provider value={value}>{children}</StorefrontContext.Provider>
 }

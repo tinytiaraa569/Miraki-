@@ -5,15 +5,16 @@ import { Lock } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TeamPanel } from "@/components/hub/team-panel"
-import { useSellerAuth } from "@/hooks/use-seller-auth"
+import { useHubAuth, hasPermission } from "@/hooks/use-hub-auth"
 import { fetcher } from "@/lib/api"
 
 /** /hub/team — substore admin management (owner only). */
 export function HubTeamPage() {
-  const { isOwner } = useSellerAuth()
+  const { isOwner, permissions } = useHubAuth()
+  const canManageTeam = isOwner || hasPermission(permissions, "team", "read")
   const { data: hub, isLoading } = useSWR("/seller/hub", fetcher, { revalidateOnFocus: false })
 
-  if (!isOwner) {
+  if (!canManageTeam) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
