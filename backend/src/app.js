@@ -28,6 +28,7 @@ import { permissionRoutes } from "./modules/permissions/permission.routes.js"
 import { roleRoutes } from "./modules/roles/role.routes.js"
 import { storeAdminRoutes } from "./modules/storeadmins/storeadmin.routes.js"
 import { storeAdminAuthRoutes } from "./modules/storeadmins/storeadmin.auth.routes.js"
+import { couponRoutes } from "./modules/coupons/coupon.routes.js"
 import { themeRoutes } from "./modules/theme/theme.routes.js"
 import { UPLOADS_ROOT } from "./utils/uploads.js"
 
@@ -138,6 +139,7 @@ app.use("/api/seller/store-admins/auth", storeAdminAuthRoutes)
 // General Settings (store-wide singleton) — before the general seller router so
 // /api/seller/general-settings resolves here first.
 app.use("/api/seller/general-settings", generalSettingsRoutes)
+app.use("/api/seller/coupons", couponRoutes)
 app.use("/api/seller", sellerRoutes)
 
 // Deny by default — unknown API routes 404 with no info leak.

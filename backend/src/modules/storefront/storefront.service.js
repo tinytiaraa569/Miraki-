@@ -5,6 +5,7 @@ import mongoose from "mongoose"
 import { env } from "../../config/env.js"
 import { cacheGet, cacheSet } from "../../config/redis.js"
 import { getTenantModels, makeTenantDbName } from "../../config/tenantDb.js"
+import { previewCouponForCart } from "../coupons/coupon.service.js"
 
 // ---------------------------------------------------------------------------
 // Canvas store: plain JSON files on disk, memory-cached at first read.
@@ -671,4 +672,31 @@ export async function resolveStorefront(countryCode) {
 
   await cacheSet(cacheKey, payload, env.CACHE_TTL_SECONDS * 5)
   return payload
+}
+
+async function getStorefrontSellerId() {
+  const dbName = await ensureStorefrontTenant()
+  const { Store } = getTenantModels(dbName)
+  const mainStore = await Store.findOne({ type: "MAIN", isDeleted: { $ne: true } })
+    .select("sellerId")
+    .lean()
+  if (!mainStore) throw new ApiError(400, "Store not configured")
+  return mainStore.sellerId
+}
+
+export async function applyStorefrontCoupon({ code, cartTotal, userId, items, countryCode }) {
+  const country = /^[A-Z]{2}$/.test(countryCode || "") ? countryCode : null
+  const { substore } = await resolveSubstore(country)
+  const dbName = await ensureStorefrontTenant()
+  const sellerId = await getStorefrontSellerId()
+
+  return previewCouponForCart({
+    tenantDbName: dbName,
+    code,
+    sellerId,
+    substoreId: substore?._id,
+    userId,
+    cartTotal,
+    items,
+  })
 }

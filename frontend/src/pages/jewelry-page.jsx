@@ -5,6 +5,8 @@ import "@fontsource-variable/cormorant-garamond"
 import { SECTION_REGISTRY } from "@/components/storefront/sections"
 import { StorefrontProvider, useStorefront } from "@/components/storefront/storefront-context"
 import { useStorefrontProducts } from "@/hooks/use-storefront-products"
+import { CartProvider } from "@/components/storefront/cart-context"
+import { CartDrawer } from "@/components/storefront/cart-drawer"
 /* ---------------------------------------------------------------------------
    Jewelry page (/jewelry). Mirrors the first section of
    mirakijewels.com/en/browse/jewelry: the store header followed by the
@@ -52,9 +54,13 @@ function JewelryContent() {
 export default function JewelryPage() {
   return (
     <StorefrontProvider>
+      <CartProvider>
+
       <main>
         <JewelryContent />
       </main>
+      <CartDrawer/>
+      </CartProvider>
     </StorefrontProvider>
   )
 }
