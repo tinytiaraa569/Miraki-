@@ -34,6 +34,13 @@ export function isRedisReady() {
   return Boolean(redis) && redisHealthy
 }
 
+// Raw client accessor for callers that issue their own commands (e.g. the
+// rate-limit store). Returns null when REDIS_URL is unset. Callers must gate on
+// isRedisReady() and fail open — Redis is best-effort here.
+export function getRedisClient() {
+  return redis
+}
+
 export async function cacheGet(key) {
   if (!isRedisReady()) return null
   try {

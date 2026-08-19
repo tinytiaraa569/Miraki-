@@ -1,24 +1,50 @@
 import jwt from "jsonwebtoken"
 import { randomUUID } from "node:crypto"
 import { env } from "../../config/env.js"
-import { jwtKeys } from "../../config/keys.js"
+import { jwtKeys, getVerifyKey } from "../../config/keys.js"
 import { Session } from "../../models/session.model.js"
 import { randomToken, sha256 } from "../../utils/crypto.js"
 
 const ACCESS_TTL = `${env.ACCESS_TOKEN_TTL_MIN}m`
 const REFRESH_TTL_MS = env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000
+// Pinned onto every access token and enforced on verify, so a token is only
+// ever accepted by THIS service for THIS purpose (a preauth token, which
+// carries a different audience, can never be replayed as an access token).
+const JWT_ISSUER = env.JWT_ISSUER
+const JWT_AUDIENCE = env.JWT_AUDIENCE
 
-// JWT payload carries IDENTITY only: { userId, sessionId, jti }.
-// NO role, NO permissions, NO sellerId/storeId — authority is re-resolved from DB on every request.
-export function signAccessToken({ userId, sessionId }) {
-  return jwt.sign({ userId: String(userId), sessionId, jti: randomUUID() }, jwtKeys.privateKey, {
-    algorithm: "RS256",
-    expiresIn: ACCESS_TTL,
-  })
+// JWT payload is cryptographically bound to the exact session identity. If the
+// session userType or sellerId changes, the token becomes invalid because the
+// server compares the JWT claims against the DB-backed session before accepting it.
+export function signAccessToken({ userId, sessionId, userType, sellerId = null }) {
+  return jwt.sign(
+    {
+      userId: String(userId),
+      sessionId,
+      userType,
+      sellerId: sellerId ? String(sellerId) : null,
+      jti: randomUUID(),
+    },
+    jwtKeys.privateKey,
+    {
+      algorithm: "RS256",
+      expiresIn: ACCESS_TTL,
+      keyid: jwtKeys.kid,
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    },
+  )
 }
 
 export function verifyAccessToken(token) {
-  return jwt.verify(token, jwtKeys.publicKey, { algorithms: ["RS256"] })
+  // Pick the verification key by the token's `kid` header (supports rotation),
+  // then verify signature + issuer + audience.
+  const kid = jwt.decode(token, { complete: true })?.header?.kid
+  return jwt.verify(token, getVerifyKey(kid), {
+    algorithms: ["RS256"],
+    issuer: JWT_ISSUER,
+    audience: JWT_AUDIENCE,
+  })
 }
 
 function fingerprint(req) {
@@ -45,18 +71,28 @@ export async function createSession({ userId, userType, sellerId = null, req }) 
     expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
   })
 
-  const accessToken = signAccessToken({ userId, sessionId })
+  const accessToken = signAccessToken({ userId, sessionId, userType, sellerId })
   return { sessionId, accessToken, refreshToken }
 }
 
-// Rotation: every refresh issues a NEW token and invalidates the old one.
-// Presenting a revoked/old token → entire token family revoked (stolen-token replay detection).
+// Rotation: every refresh issues a NEW token and remembers the consumed one as
+// `prevRefreshTokenHash`. Presenting the CURRENT token rotates normally;
+// presenting an already-consumed (previous) token means the token was replayed
+// — the whole family is revoked (stolen-token reuse detection). An unknown
+// token that matches neither is simply rejected.
 export async function rotateRefreshToken({ refreshToken, req }) {
   const hash = sha256(refreshToken)
   const session = await Session.findOne({ refreshTokenHash: hash })
 
   if (!session) {
-    // Possibly a replayed old token — try to find and revoke its family.
+    // Not the current token. If it matches a PREVIOUS (rotated-away) hash, a
+    // consumed refresh token is being replayed → treat the family as
+    // compromised and revoke every session in it. Otherwise it's just unknown.
+    const replayed = await Session.findOne({ prevRefreshTokenHash: hash })
+    if (replayed) {
+      await Session.updateMany({ tokenFamily: replayed.tokenFamily }, { revoked: true })
+      console.error("[server] SECURITY: refresh token reuse detected, family revoked:", replayed.tokenFamily)
+    }
     return null
   }
   if (session.revoked || session.expiresAt < new Date()) {
@@ -72,13 +108,21 @@ export async function rotateRefreshToken({ refreshToken, req }) {
   }
 
   const newRefreshToken = randomToken(32)
+  // Remember the token we're consuming so a later replay of it is DETECTED
+  // (found by prevRefreshTokenHash) rather than silently missing.
+  session.prevRefreshTokenHash = session.refreshTokenHash
   session.refreshTokenHash = sha256(newRefreshToken)
   session.ipHash = ipHash
   session.lastSeen = new Date()
   session.expiresAt = new Date(Date.now() + REFRESH_TTL_MS)
   await session.save()
 
-  const accessToken = signAccessToken({ userId: session.userId, sessionId: session.sessionId })
+  const accessToken = signAccessToken({
+    userId: session.userId,
+    sessionId: session.sessionId,
+    userType: session.userType,
+    sellerId: session.sellerId,
+  })
   return { accessToken, refreshToken: newRefreshToken, session }
 }
 
@@ -105,8 +149,8 @@ export async function killOtherUserSessions(userId, keepSessionId) {
 export function setAuthCookies(res, { accessToken, refreshToken }) {
   const base = {
     httpOnly: true,
-    secure: env.NODE_ENV === "production",
-    sameSite: env.NODE_ENV === "production" ? "strict" : "lax",
+    secure: env.COOKIE_SECURE,
+    sameSite: env.COOKIE_SECURE ? "strict" : "lax",
     path: "/",
   }
   res.cookie("access_token", accessToken, { ...base, maxAge: env.ACCESS_TOKEN_TTL_MIN * 60 * 1000 })

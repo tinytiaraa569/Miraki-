@@ -11,6 +11,10 @@ export const storeAdminSchema = new mongoose.Schema(
     totpEnabled: { type: Boolean, default: false },      //  has enrollment actually completed
     totpSecret: { type: String, default: null, select: false },
     twoStepVerifiedAt: { type: Date, default: null },
+    // Last accepted TOTP time-step counter. A code whose step is <= this was
+    // already used, so it is rejected even while still inside the drift window
+    // (replay protection). Never selected by clients directly.
+    lastTotpStep: { type: Number, default: null, select: false },
 
     roleId: { type: mongoose.Schema.Types.ObjectId, ref: "Role", required: true },
     overridePermissions: {

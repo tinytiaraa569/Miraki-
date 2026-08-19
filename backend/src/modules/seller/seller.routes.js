@@ -1,6 +1,6 @@
 import { Router } from "express"
 import { authenticate } from "../../middleware/authenticate.js"
-import { loadUser, requireRole } from "../../middleware/loadUser.js"
+import { loadUser, requireRole, requireStoreAccess } from "../../middleware/loadUser.js"
 import { loginLimiter } from "../../middleware/rateLimiter.js"
 import { validate } from "../../middleware/validate.js"
 import { addStoreUser, addSubstore, branding, hubOverview, saveProfile, sellerLogin, sellerMe } from "./seller.controller.js"
@@ -20,13 +20,14 @@ sellerRoutes.post("/auth/login", loginLimiter, validate(sellerLoginSchema), sell
 // Everything below: authenticate → loadUser (re-resolves seller + tenant DB
 // fresh on EVERY request, kicks suspended/trashed tenants mid-session) →
 // role gate. A platform session hitting these routes fails the role gate.
-const storeRoles = requireRole("SELLER_SUPERADMIN", "STORE_SUPERADMIN", "STORE_ADMIN")
+// requireStoreAccess allows StoreUser with hard-coded roles OR StoreAdmin with any active assigned role.
+const storeAccess = requireStoreAccess()
 const ownerOnly = requireRole("SELLER_SUPERADMIN")
 
-sellerRoutes.get("/me", authenticate, loadUser, storeRoles, sellerMe)
-sellerRoutes.get("/hub", authenticate, loadUser, storeRoles, hubOverview)
+sellerRoutes.get("/me", authenticate, loadUser, storeAccess, sellerMe)
+sellerRoutes.get("/hub", authenticate, loadUser, storeAccess, hubOverview)
 // Branding micro-payload (aggregation $project — logos + colors only).
-sellerRoutes.get("/branding", authenticate, loadUser, storeRoles, branding)
+sellerRoutes.get("/branding", authenticate, loadUser, storeAccess, branding)
 
 // Substores are OPTIONAL — the service additionally enforces the
 // platform-controlled multistoreEnabled flag. MAIN store always exists.

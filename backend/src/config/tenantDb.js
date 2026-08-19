@@ -3,6 +3,8 @@ import { brandSchema } from "../modules/brands/brand.model.js"
 import { categorySchema } from "../modules/categories/category.model.js"
 import { collectionSchema } from "../modules/collections/collection.model.js"
 import { collectionMemberSchema } from "../modules/collections/collectionMember.model.js"
+import { discountSchema } from "../modules/discounts/discount.model.js"
+import { generalSettingsSchema } from "../modules/generalsettings/generalSettings.model.js"
 import { optionSetSchema } from "../modules/optionsets/optionSet.model.js"
 import { productSchema } from "../modules/products/product.model.js"
 import { productVariantSchema } from "../modules/productvariants/productVariant.model.js"
@@ -77,6 +79,7 @@ export function getTenantModels(dbName) {
     CollectionMember:
       conn.models.CollectionMember ||
       conn.model("CollectionMember", collectionMemberSchema, "collectionMembers"),
+    Discount: conn.models.Discount || conn.model("Discount", discountSchema, "discounts"),
     OptionSet: conn.models.OptionSet || conn.model("OptionSet", optionSetSchema, "optionSets"),
     MetafieldDefinition:
       conn.models.MetafieldDefinition ||
@@ -88,7 +91,9 @@ export function getTenantModels(dbName) {
       conn.models.ProductVariant || conn.model("ProductVariant", productVariantSchema, "productVariants"),
     Permission : conn.models.Permission || conn.model("Permission", permissionSchema, "permissions"),
     Role : conn.models.Role || conn.model("Role", roleSchema, "roles"),
-    StoreAdmin : conn.models.StoreAdmin || conn.model("StoreAmin", storeAdminSchema, "storeadmins"),
+    StoreAdmin: conn.models.StoreAdmin || conn.model("StoreAdmin", storeAdminSchema, "storeadmins"),
+    GeneralSettings:
+      conn.models.GeneralSettings || conn.model("GeneralSettings", generalSettingsSchema, "generalsettings"),
   }
 
   modelCache.set(dbName, models)

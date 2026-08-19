@@ -162,7 +162,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { useSidebar } from "@/components/ui/sidebar"
-import { activeChildUrl } from "@/lib/seller-nav"
+import { activeChildUrl, canAccessNavItem } from "@/lib/seller-nav"
+import { useHubAuth } from "@/hooks/use-hub-auth"
 import { cn } from "@/lib/utils"
 
 /**
@@ -172,6 +173,7 @@ import { cn } from "@/lib/utils"
  */
 export const NavSubmenuOverlay = memo(function NavSubmenuOverlay({ parent, onClose }) {
   const { state, isMobile, setOpenMobile } = useSidebar()
+  const { permissions, isOwner } = useHubAuth()
   const { pathname } = useLocation()
   const [query, setQuery] = useState("")
   const panelRef = useRef(null)
@@ -204,11 +206,11 @@ export const NavSubmenuOverlay = memo(function NavSubmenuOverlay({ parent, onClo
   }, [parent])
 
   const items = useMemo(() => {
-    const list = parent?.items ?? []
+    const list = (parent?.items ?? []).filter((item) => canAccessNavItem(item, permissions, isOwner))
     const q = query.trim().toLowerCase()
     if (!q) return list
     return list.filter((c) => c.title.toLowerCase().includes(q))
-  }, [parent, query])
+  }, [parent, permissions, isOwner, query])
 
   // Deepest matching sibling wins — computed over ALL children (not the
   // filtered list) so search never changes which link is highlighted.

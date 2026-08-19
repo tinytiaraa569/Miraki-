@@ -2,7 +2,7 @@
 
 import { useMemo } from "react"
 import { Link, useLocation } from "react-router-dom"
-import { ArrowRight, FolderKanban, Inbox } from "lucide-react"
+import { ArrowRight, FolderKanban, Inbox, Lock } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { findNavMatch } from "@/lib/seller-nav"
@@ -20,11 +20,31 @@ export function HubModulePage() {
   const item = match?.item
   const parent = match?.parent
   const Icon = item?.icon ?? FolderKanban
+  const isForbidden = pathname === "/hub/forbidden"
 
   const siblings = useMemo(() => {
+    if (isForbidden) return []
     if (!parent?.items) return []
     return parent.items.filter((c) => c.url !== item?.url)
-  }, [parent, item])
+  }, [isForbidden, parent, item])
+
+  if (isForbidden) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
+          <span className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <Lock className="size-5" aria-hidden="true" />
+          </span>
+          <div className="flex flex-col gap-1">
+            <h1 className="text-lg font-semibold text-foreground">No dashboard access assigned</h1>
+            <p className="mx-auto max-w-md text-sm text-muted-foreground">
+              Your account is active, but its role has no permissions for the Seller Hub. Ask the store owner to assign access.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-6">

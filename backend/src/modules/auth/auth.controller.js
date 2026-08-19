@@ -21,8 +21,8 @@ const PREAUTH_COOKIE = "preauth_token"
 function setPreauthCookie(res, token) {
   res.cookie(PREAUTH_COOKIE, token, {
     httpOnly: true,
-    secure: env.NODE_ENV === "production",
-    sameSite: env.NODE_ENV === "production" ? "strict" : "lax",
+    secure: env.COOKIE_SECURE,
+    sameSite: env.COOKIE_SECURE ? "strict" : "lax",
     path: "/api/auth",
     maxAge: 5 * 60 * 1000,
   })

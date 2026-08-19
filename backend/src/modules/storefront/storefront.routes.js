@@ -1,4 +1,5 @@
 import { Router } from "express"
+import { getPublicHead } from "../generalsettings/generalSettings.service.js"
 import {
   resolveStorefront,
   resolveSubstore,
@@ -8,6 +9,7 @@ import {
   listStorefrontProducts,
   getStorefrontProduct,
   getStorefrontVariantMedia,
+  ensureStorefrontTenant,
 } from "./storefront.service.js"
 
 // PUBLIC, read-only storefront resolver — no auth, safe by construction:
@@ -36,6 +38,22 @@ function detectCountry(req) {
   const h = String(header).toUpperCase()
   return /^[A-Z]{2}$/.test(h) ? h : null
 }
+
+// PUBLIC head for the storefront <title> / description / favicon, templated
+// from the store-wide General Settings singleton. Consumed by the dev Vite
+// plugin (transformIndexHtml); prod injects the SAME head in-process via the
+// serveStorefront middleware. No secrets (never the password hash). Same cache
+// contract as /resolve so it can sit on a CDN.
+storefrontRoutes.get("/site", async (_req, res, next) => {
+  try {
+    const dbName = await ensureStorefrontTenant()
+    const payload = await getPublicHead(dbName)
+    res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300")
+    res.json(payload)
+  } catch (err) {
+    next(err)
+  }
+})
 
 storefrontRoutes.get("/resolve", async (req, res, next) => {
   try {

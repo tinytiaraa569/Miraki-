@@ -1,6 +1,6 @@
 import { PlatformUser } from "../../models/platformUser.model.js"
 import { ApiError } from "../../utils/apiError.js"
-import { verifyPassword } from "../../utils/crypto.js"
+import { verifyPassword, verifyPasswordDecoy } from "../../utils/crypto.js"
 import { audit } from "../audit/audit.service.js"
 
 const MAX_FAILED_ATTEMPTS = 5
@@ -12,7 +12,12 @@ const INVALID = () => new ApiError(401, "Invalid credentials")
 export async function verifyPlatformLogin({ email, password, req }) {
   const user = await PlatformUser.findOne({ email: email.toLowerCase() }).select("+passwordHash")
 
-  if (!user) throw INVALID()
+  if (!user) {
+    // Anti-enumeration: equalize timing with the real wrong-password path so
+    // response time can't reveal whether this email is registered.
+    await verifyPasswordDecoy(password)
+    throw INVALID()
+  }
 
   if (user.lockedUntil && user.lockedUntil > new Date()) {
     throw new ApiError(429, "Account temporarily locked. Try again later.")

@@ -31,13 +31,6 @@ function sortingToParam(sorting) {
   return `${s.desc ? "-" : ""}${key}`
 }
 
-/**
- * /hub/advanced/metafields — StoreHippo-style Metafields manager.
- *
- * A server-driven list table (pagination / sorting / search handled by the
- * `$facet` aggregation) fed by SWR. "Add New" and row/Edit navigate to the
- * full-page editor, which loads the deep fields[] tree only when opened.
- */
 export default function HubMetafieldsPage() {
   const navigate = useNavigate()
   const [search, setSearch] = useState("")

@@ -105,4 +105,25 @@ export const authenticator = {
     }
     return false
   },
+
+  // Like verify(), but returns the matched time-step COUNTER (or null on no
+  // match) instead of a boolean. Callers persist the last accepted counter and
+  // reject any later code whose counter is <= it — this stops replay of an
+  // already-used code that is otherwise still inside the drift window.
+  verifyGetStep({ token, secret }) {
+    if (!token || !secret) return null
+    const { step, digits, window } = this.options
+    const secretBuffer = base32Decode(secret)
+    const counter = Math.floor(Date.now() / 1000 / step)
+    const candidate = String(token).trim()
+
+    for (let errorWindow = -window; errorWindow <= window; errorWindow++) {
+      const c = counter + errorWindow
+      const expected = generateHotp(secretBuffer, c, digits)
+      const a = Buffer.from(expected)
+      const b = Buffer.from(candidate)
+      if (a.length === b.length && timingSafeEqual(a, b)) return c
+    }
+    return null
+  },
 }

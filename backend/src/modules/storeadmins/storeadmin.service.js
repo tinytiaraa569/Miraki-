@@ -2,126 +2,8 @@ import { getTenantModels } from "../../config/tenantDb.js";
 import { ApiError } from "../../utils/apiError.js";
 import { hashPassword } from "../../utils/crypto.js";
 import { audit } from "../audit/audit.service.js";
-import { Seller } from "../sellers/seller.model.js";
-
-import { StoreAdmin } from "./storeadmin.model.js";
-import { verifyPassword } from "../../utils/crypto.js";
-
-const MAX_FAILED_ATTEMPTS = 5
-const LOCKOUT_MS = 15 * 60 * 1000
-
-
-const INVALID = (code = "INVALID_CREDENTIALS") => {
-  const err = new ApiError(401, "Invalid credentials")
-  err.code = code
-  return err
-}
-
-export async function verifyStoreAdminLogin({ email, password, req }) {
-  const normalizedEmail = email.toLowerCase()
-
-  const sellers = await Seller.find({ status: "active", deletedAt: null })
-    .select("_id dbName")
-    .lean()
-
-  let seller = null
-  let user = null
-
-  for (const candidate of sellers) {
-    const { StoreAdmin } = getTenantModels(candidate.dbName)
-    const match = await StoreAdmin.findOne({
-      email: normalizedEmail,
-      isDeleted: false,
-    }).select("+passwordHash")
-
-    if (match) {
-      seller = candidate
-      user = match
-      break
-    }
-  }
-
-  if (!seller || !user || !user.passwordHash) throw INVALID("ACCOUNT_NOT_FOUND")
-
-  if (user.lockedUntil && user.lockedUntil > new Date()) {
-    throw new ApiError(429, "Account temporarily locked. Try again later.")
-  }
-  if (user.status !== "active") throw INVALID()
-
-  const ok = await verifyPassword(user.passwordHash, password)
-  if (!ok) {
-    user.failedLoginAttempts += 1
-    if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
-      user.lockedUntil = new Date(Date.now() + LOCKOUT_MS)
-      user.failedLoginAttempts = 0
-      await audit({
-        req,
-        actorId: user._id,
-        actorRole: "STORE_ADMIN",
-        sellerId: seller._id,
-        action: "storeadmin.auth.lockout",
-        targetType: "StoreAdmin",
-        targetId: user._id,
-      })
-    }
-    await user.save()
-    throw INVALID()
-  }
-
-  user.failedLoginAttempts = 0
-  user.lockedUntil = null
-  await user.save()
-
-  await audit({
-    req,
-    actorId: user._id,
-    actorRole: "STORE_ADMIN",
-    sellerId: seller._id,
-    // action: "storeadmin.auth.login",
-    targetType: "StoreAdmin",
-    targetId: user._id,
-  })
-
-  return { user, seller }
-}
-
-// export async function verifyStoreAdminLogin({ email, password, req }) {
-//   const seller = await Seller.findOne({ deletedAt: null })
-//   if (!seller) throw INVALID("USER_NOT_FOUND")
-
-//   console.log(seller)
-
-//   const { StoreAdmin } = await getTenantModels(seller.dbName)
-//   const user = await StoreAdmin.findOne({ email: email.toLowerCase(), isDeleted: false }).select("+passwordHash")
-//   console.log(await StoreAdmin.findOne({ email: email.toLowerCase()}) ,true)
-//   console.log(email)
-
-//   if (!user) throw INVALID("USER_NOT_FOUND")
-
-//   if (user.lockedUntil && user.lockedUntil > new Date()) {
-//     throw new ApiError(429, "Account temporarily locked. Try again later.")
-//   }
-//   if (user.status !== "active") throw INVALID()
-
-//   const ok = await verifyPassword(user.passwordHash, password)
-//   if (!ok) {
-//     user.failedLoginAttempts += 1
-//     if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
-//       user.lockedUntil = new Date(Date.now() + LOCKOUT_MS)
-//       user.failedLoginAttempts = 0
-//       await audit({ req, actorId: user._id, actorRole: "STORE_ADMIN", action: "auth.lockout", targetType: "StoreAdmin", targetId: user._id })
-//     }
-//     await user.save()
-//     throw INVALID()
-//   }
-
-//   user.failedLoginAttempts = 0
-//   user.lockedUntil = null
-//   await user.save()
-
-//   await audit({ req, actorId: user._id, actorRole: "STORE_ADMIN", action: "auth.login", targetType: "StoreAdmin", targetId: user._id })
-//   return { user, seller }
-// }
+import { UserDirectory } from "../../models/userDirectory.model.js";
+import { killAllUserSessions } from "../auth/token.service.js";
 
 const PUBLIC_FIELDS =
   "name email status roleId substoreIds overridePermissions twoFactorRequired totpEnabled createdAt updatedAt";
@@ -269,10 +151,14 @@ export async function getStoreAdmin({ seller, tenantDbName, id }) {
 export async function createStoreAdmin({seller,tenantDbName,actor,body, req}) {
   const { StoreAdmin, Role, Store } = getTenantModels(tenantDbName);
 
-  const email = body.email.toLowerCase();
-  const existing = await StoreAdmin.exists({ email });
-  if (existing)
-    throw new ApiError(409, "A store admin with this email already exists");
+  const email = body.email.trim().toLowerCase();
+  const [existing, directoryEntry] = await Promise.all([
+    StoreAdmin.exists({ email }),
+    UserDirectory.exists({ email }),
+  ]);
+  if (existing || directoryEntry) {
+    throw new ApiError(409, "This email is already in use");
+  }
 
   // await assertValidAssignments({ Role, Store, seller, roleId: body.roleId, substoreIds: body.substoreIds })
 
@@ -287,20 +173,28 @@ export async function createStoreAdmin({seller,tenantDbName,actor,body, req}) {
   const passwordHash = await hashPassword(body.password);
 
   const admin = await StoreAdmin.create({
-    sellerId: seller._id,
-    name: body.name,
-    email,
-    passwordHash,
-    twoFactorRequired: body.twoFactorRequired ?? true,
-    roleId: body.roleId,
-    overridePermissions: {
-      grant: body.overridePermissions?.grant ?? [],
-      revoke: body.overridePermissions?.revoke ?? [],
-    },
-    substoreIds,
-    status: body.status ?? "active",
-    createdBy: actor._id,
-  });
+      sellerId: seller._id,
+      name: body.name,
+      email,
+      passwordHash,
+      twoFactorRequired: body.twoFactorRequired ?? true,
+      roleId: body.roleId,
+      overridePermissions: {
+        grant: body.overridePermissions?.grant ?? [],
+        revoke: body.overridePermissions?.revoke ?? [],
+      },
+      substoreIds,
+      status: body.status ?? "active",
+      createdBy: actor._id,
+    });
+
+  try {
+    await UserDirectory.create({ email, sellerId: seller._id, userId: admin._id });
+  } catch (error) {
+    await StoreAdmin.deleteOne({ _id: admin._id });
+    if (error?.code === 11000) throw new ApiError(409, "This email is already in use");
+    throw error;
+  }
 
   await audit({
     req,
@@ -346,14 +240,13 @@ export async function updateStoreAdmin({ seller, tenantDbName, actor, id, body, 
 
   // Email change — re-check uniqueness excluding self
   if (email !== undefined) {
-    const nextEmail = email.toLowerCase();
+    const nextEmail = email.trim().toLowerCase();
     if (nextEmail !== doc.email) {
-      const existing = await StoreAdmin.exists({
-        email: nextEmail,
-        _id: { $ne: doc._id },
-      });
-      if (existing)
-        throw new ApiError(409, "A store admin with this email already exists");
+      const [existing, directoryEntry] = await Promise.all([
+        StoreAdmin.exists({ email: nextEmail, _id: { $ne: doc._id } }),
+        UserDirectory.exists({ email: nextEmail, userId: { $ne: doc._id } }),
+      ]);
+      if (existing || directoryEntry) throw new ApiError(409, "This email is already in use");
       doc.email = nextEmail;
     }
   }
@@ -383,7 +276,25 @@ export async function updateStoreAdmin({ seller, tenantDbName, actor, id, body, 
     };
   }
 
+  const oldEmail = before.email;
   await doc.save();
+
+  try {
+    await UserDirectory.findOneAndUpdate(
+      { userId: doc._id, sellerId: seller._id },
+      { $set: { email: doc.email, sellerId: seller._id, userId: doc._id } },
+      { upsert: true },
+    );
+  } catch (error) {
+    doc.email = oldEmail;
+    await doc.save();
+    if (error?.code === 11000) throw new ApiError(409, "This email is already in use");
+    throw error;
+  }
+
+  if (status === "suspended") {
+    await killAllUserSessions(doc._id);
+  }
 
   await audit({
     req,

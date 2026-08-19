@@ -70,6 +70,10 @@ export function RichTextEditor({
   maxLength,
   id,
   ariaLabel,
+  // When true the toolbar is hidden and the surface is non-editable — a
+  // view-only rendition for users without write permission. Defaults to false,
+  // so every existing usage keeps its current editable behaviour.
+  readOnly = false,
 }) {
   const ref = useRef(null)
   const [focused, setFocused] = useState(false)
@@ -142,6 +146,7 @@ export function RichTextEditor({
       )}
     >
       {/* Toolbar */}
+      {!readOnly && (
       <div className="flex flex-wrap items-center gap-0.5 border-b border-border bg-muted/30 p-1.5">
         <ToolbarButton title="Undo" onAction={() => exec("undo")}>
           <Undo2 className={ICON} />
@@ -197,6 +202,7 @@ export function RichTextEditor({
           <RemoveFormatting className={ICON} />
         </ToolbarButton>
       </div>
+      )}
 
       {/* Editable surface */}
       <div className="relative">
@@ -209,9 +215,10 @@ export function RichTextEditor({
           role="textbox"
           aria-multiline="true"
           aria-label={ariaLabel || placeholder}
-          contentEditable
+          aria-readonly={readOnly || undefined}
+          contentEditable={!readOnly}
           suppressContentEditableWarning
-          onInput={emit}
+          onInput={readOnly ? undefined : emit}
           onBlur={() => setFocused(false)}
           onFocus={() => setFocused(true)}
           onKeyUp={() => force((n) => n + 1)}
@@ -219,6 +226,7 @@ export function RichTextEditor({
           style={{ minHeight }}
           className={cn(
             "rte-content max-w-none px-3 py-2.5 text-sm leading-relaxed text-foreground focus:outline-none",
+            readOnly && "opacity-70",
             editorClassName,
           )}
         />
