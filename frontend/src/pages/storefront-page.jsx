@@ -4,6 +4,8 @@ import { useEffect } from "react"
 import "@fontsource-variable/cormorant-garamond"
 import { SECTION_REGISTRY } from "@/components/storefront/sections"
 import { StorefrontProvider, useStorefront } from "@/components/storefront/storefront-context"
+import { CartProvider } from "@/components/storefront/cart-context"
+import { CartDrawer } from "@/components/storefront/cart-drawer"
 
 /** Lightweight skeleton shown only on the very first cold load. */
 function StorefrontSkeleton() {
@@ -58,9 +60,13 @@ function CanvasRenderer() {
 export default function StorefrontPage() {
   return (
     <StorefrontProvider>
+      <CartProvider>
+
       <main>
         <CanvasRenderer />
       </main>
+         <CartDrawer/>
+      </CartProvider>
     </StorefrontProvider>
   )
 }

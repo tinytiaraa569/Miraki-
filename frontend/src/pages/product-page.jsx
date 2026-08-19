@@ -7,6 +7,8 @@ import "@fontsource-variable/cormorant-garamond"
 import { ProductDetail, ProductDetailHeader } from "@/components/storefront/product-detail"
 import { StorefrontProvider, useStorefront } from "@/components/storefront/storefront-context"
 import { useStorefrontProduct } from "@/hooks/use-storefront-products"
+import { CartProvider } from "@/components/storefront/cart-context"
+import {CartDrawer} from "@/components/storefront/cart-drawer"
 
 /* ---------------------------------------------------------------------------
    Product page (/product/:alias). Reuses the resolved storefront header from
@@ -64,9 +66,12 @@ function ProductContent() {
 export default function ProductPage() {
   return (
     <StorefrontProvider>
-      <main>
-        <ProductContent />
-      </main>
+      <CartProvider>
+        <main>
+          <ProductContent />
+        </main>
+        <CartDrawer />
+      </CartProvider>
     </StorefrontProvider>
   )
 }

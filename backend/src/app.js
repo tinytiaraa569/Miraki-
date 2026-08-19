@@ -25,6 +25,7 @@ import { permissionRoutes } from "./modules/permissions/permission.routes.js"
 import { roleRoutes } from "./modules/roles/role.routes.js"
 import { storeAdminRoutes } from "./modules/storeadmins/storeadmin.routes.js"
 import { storeAdminAuthRoutes } from "./modules/storeadmins/storeadmin.auth.routes.js"
+import { couponRoutes } from "./modules/coupons/coupon.routes.js"
 import { themeRoutes } from "./modules/theme/theme.routes.js"
 import { UPLOADS_ROOT } from "./utils/uploads.js"
 
@@ -124,6 +125,7 @@ app.use("/api/seller/permissions", permissionRoutes)
 app.use("/api/seller/roles", roleRoutes)
 app.use("/api/seller/store-admins", storeAdminRoutes)
 app.use("/api/seller/store-admins/auth", storeAdminAuthRoutes)
+app.use("/api/seller/coupons", couponRoutes)
 app.use("/api/seller", sellerRoutes)
 
 // Deny by default — unknown API routes 404 with no info leak.

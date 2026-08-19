@@ -4099,6 +4099,7 @@ import {
 } from "@/components/ui/sheet"
 import { Slider } from "@/components/ui/slider"
 import { Link } from "react-router-dom"
+import {useCart} from "./cart-context"
 
 /* ---------------------------------------------------------------------------
    Miraki storefront sections. Each component receives the `props` object of
@@ -4151,6 +4152,7 @@ export function Header({ brand, tagline, nav = [], navRight = [], showCountrySwi
   const [searchOpen, setSearchOpen] = useState(false)
   const [logoFailed, setLogoFailed] = useState(false)
     const searchInputRef = useRef(null)
+    const { itemCount, cartOpen } = useCart()
 
 
   // Lock body scroll while the mobile drawer is open, and allow Escape to close.
@@ -4310,7 +4312,7 @@ export function Header({ brand, tagline, nav = [], navRight = [], showCountrySwi
           <button type="button" aria-label="Wishlist" className="hidden text-sf-ink hover:text-sf-brand sm:block">
             <Heart className="size-5" aria-hidden="true" />
           </button>
-          <button type="button" aria-label="Shopping bag, 1 item" className="relative text-sf-ink hover:text-sf-brand">
+          {/* <button type="button" aria-label="Shopping bag, 1 item" className="relative text-sf-ink hover:text-sf-brand">
             <ShoppingBag className="size-5" aria-hidden="true" />
             <span
               aria-hidden="true"
@@ -4318,6 +4320,22 @@ export function Header({ brand, tagline, nav = [], navRight = [], showCountrySwi
             >
               1
             </span>
+          </button> */}
+          <button
+            type="button"
+            onClick={cartOpen}
+            aria-label={`Shopping bag, ${itemCount} item${itemCount === 1 ? "" : "s"}`}
+            className="relative text-sf-ink hover:text-sf-brand"
+          >
+            <ShoppingBag className="size-5" aria-hidden="true" />
+            {itemCount > 0 ? (
+              <span
+                aria-hidden="true"
+                className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-sf-brand font-sans text-[10px] leading-none text-sf-brand-foreground"
+              >
+                {itemCount > 9 ? "9+" : itemCount}
+              </span>
+            ) : null}
           </button>
         </div>
       </div>

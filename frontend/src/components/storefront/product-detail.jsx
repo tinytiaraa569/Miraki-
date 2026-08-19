@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useMemo, useState, useRef } from "react"
-import { ChevronDown, ChevronLeft, ChevronRight, Heart, Check,ZoomIn } from "lucide-react"
+import { ChevronDown, ChevronLeft, ChevronRight, Heart, Check, Loader2, Minus, Plus, ZoomIn } from "lucide-react"
 import { SECTION_REGISTRY } from "@/components/storefront/sections"
 import { ImageZoomLightbox } from "@/components/storefront/image-zoom-lightbox"
 import { useStorefront } from "@/components/storefront/storefront-context"
+import { useCart } from "@/components/storefront/cart-context"
 import { useStorefrontVariantMedia } from "@/hooks/use-storefront-products"
 import { isValueBearing } from "@/components/hub/option-sets/option-set-utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -201,6 +202,7 @@ function OptionAccordion({ option, selectedValue, onSelect }) {
 
 export function ProductDetail({ product }) {
   const { formatPrice } = useStorefront()
+  const { addItem, addingItem } = useCart()
   const [tab, setTab] = useState("customization")
   const [activeImg, setActiveImg] = useState(0)
   const [zoomOpen, setZoomOpen] = useState(false)
@@ -208,6 +210,9 @@ export function ProductDetail({ product }) {
   const [wished, setWished] = useState(false)
   const [budget, setBudget] = useState("")
   const [charity, setCharity] = useState("tree")
+  const [quantity, setQuantity] = useState(1)
+  const [addError, setAddError] = useState("")
+  const [justAdded, setJustAdded] = useState(false)
   const scrollerRef = useRef(null)
 
   // Mobile carousel: keep the active dot in sync with the scroll position, and
@@ -236,7 +241,7 @@ export function ProductDetail({ product }) {
         (o) => (o.values || []).length > 0 || o.type === "text" || o.type === "textarea",
       ),
     [product.options],
-  )
+  ) 
 
   // Seed selections with each option's default (or first) value.
   const [selected, setSelected] = useState(() => {
@@ -256,6 +261,7 @@ export function ProductDetail({ product }) {
   const onSelect = (name, value) => {
     setUserInteracted(true)
     setSelected((prev) => ({ ...prev, [name]: value }))
+    if (addError) setAddError("")
   }
 
   // Variant-DEFINING options only: not "show always" (those are pure add-ons)
@@ -327,6 +333,35 @@ export function ProductDetail({ product }) {
   }, [firstImageUrl])
   const crumbs = ["Home", "Jewelry", product.tag || "Collection"].filter(Boolean)
 
+  async function handleAddToCart() {
+      // if (!variantResolved) {
+      //   setAddError("Please select an option for every choice above")
+      //   return
+      // }
+    setAddError("")
+    setJustAdded(false)
+    try {
+      await addItem({
+        product, 
+        variant: matchedVariant,
+        options: options.map((opt) => {
+          const val = (opt.values || []).find((v) => v.value === selected[opt.name])
+          return {
+            name: opt.name,
+            label: opt.displayName || opt.name,
+            value: selected[opt.name] ?? "",
+            valueLabel: val?.label ?? selected[opt.name] ?? "",
+          }
+        }),
+        quantity,
+        price: total,
+        alias: product.alias,
+      })
+      setJustAdded(true)
+    } catch (err) {
+      setAddError(err.message || "Couldn't add this to your cart — please try again")
+    }
+  }
   return (
     <div className="mx-auto max-w-[100rem] px-4 pb-20 pt-8 lg:px-10">
       {/* Breadcrumb */}
@@ -500,19 +535,56 @@ export function ProductDetail({ product }) {
                 />
               ))}
 
+              {/* Quantity stepper */}
+              <div className="flex items-center justify-between border-b border-sf-brand/15 py-4">
+                <span className="font-sans text-base text-sf-ink">Quantity</span>
+                <div className="flex items-center gap-2 rounded-md border border-sf-brand/25">
+                  <button
+                    type="button"
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    disabled={quantity <= 1}
+                    aria-label="Decrease quantity"
+                    className="grid size-8 cursor-pointer place-items-center text-sf-brand disabled:opacity-30"
+                  >
+                    <Minus className="size-3.5" aria-hidden="true" />
+                  </button>
+                  <span className="w-6 text-center text-sm text-sf-ink">{quantity}</span>
+                  <button
+                    type="button"
+                    onClick={() => setQuantity((q) => q + 1)}
+                    aria-label="Increase quantity"
+                    className="grid size-8 cursor-pointer place-items-center text-sf-brand"
+                  >
+                    <Plus className="size-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+
               <p className="mt-6 font-sans text-xl text-sf-ink font-medium">
                 Total Price:{" "}
                 <span className={`pl-1 text-[#740031] transition-opacity duration-200 ${variantLoading ? "opacity-40" : "opacity-100"}`}>
-                  {formatPrice(total)}
+                  {formatPrice(total * quantity)}
                 </span>
               </p>
+
+              {addError ? <p className="mt-2 text-sm text-red-600">{addError}</p> : null}
+              {justAdded && !addError ? <p className="mt-2 text-sm text-sf-brand">Added to cart</p> : null}
 
               <div className="mt-5 flex items-stretch gap-3">
                 <button
                   type="button"
-                  className="cursor-pointer flex-1 bg-sf-blush px-8 py-4 text-center text-md font-semibold tracking-widest text-black transition-opacity hover:opacity-90"
+                  onClick={handleAddToCart}
+                  disabled={addingItem}
+                  className="cursor-pointer flex-1 bg-sf-blush px-8 py-4 text-center text-md font-semibold tracking-widest text-black transition-opacity hover:opacity-90 disabled:opacity-60"
                   >
-                  Purchase with Purpose
+                  {addingItem ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                      Adding…
+                    </span>
+                  ) : (
+                    "Purchase with Purpose"
+                  )}
                 </button>
                 <button
                   type="button"
