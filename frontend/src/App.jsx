@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useSellerAuth } from "@/hooks/use-seller-auth"
 import { Toaster } from "sonner"
 import { useStoreAdminAuth } from "./hooks/use-storeadmin-auth"
+import CheckoutPage from "./pages/checkout-page"
 
 
 const HubOverviewPage = lazy(() => import("@/pages/hub/overview-page"))
@@ -44,6 +45,8 @@ const HubStoreAdminPage = lazy(()=> import("@/pages/hub/store-admins-page"))
 const StorefrontPage = lazy(() => import("@/pages/storefront-page"))
 const JewelryPage = lazy(() => import("@/pages/jewelry-page"))
 const ProductPage = lazy(() => import("@/pages/product-page"))
+
+const CouponsPage = lazy(() => import("@/pages/hub/coupons/coupons-page"))
 
 
 function FullScreenLoader() {
@@ -169,6 +172,8 @@ export default function App() {
         <Route path="profile" element={<HubProfilePage />} />
         <Route path="advanced/appearance" element={<HubAppearancePage />} />
 
+        <Route path="marketing/coupons" element={<CouponsPage />} />
+
         {/* Metafields */}
 
         <Route path="advanced/metafields" element={<HubMetafieldsPage />} />
@@ -201,6 +206,15 @@ export default function App() {
         element={
           <Suspense fallback={<FullScreenLoader />}>
             <ProductPage />
+          </Suspense>
+        }
+      />
+
+      <Route
+        path="/checkout"
+        element={
+          <Suspense fallback={<FullScreenLoader />}>
+            <CheckoutPage />
           </Suspense>
         }
       />
