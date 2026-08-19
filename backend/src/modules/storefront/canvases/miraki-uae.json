@@ -13,13 +13,13 @@
         "brand": "MIRAKI",
         "tagline": "MIRACULOUS · RARE · KINDRED",
         "nav": [
-          { "label": "Engagement Rings", "href": "#engagement" },
-          { "label": "Jewelry", "href": "#jewelry" },
-          { "label": "Bespoke", "href": "#bespoke" }
+          { "label": "Engagement Rings", "href": "/engagement" },
+          { "label": "Jewelry", "href": "/jewelry" },
+          { "label": "Bespoke", "href": "/bespoke" }
         ],
         "navRight": [
-          { "label": "Our Journal", "href": "#journal" },
-          { "label": "Our Roots", "href": "#roots" }
+          { "label": "Our Journal", "href": "/journal" },
+          { "label": "Our Roots", "href": "/roots" }
         ],
         "showCountrySwitcher": true
       }
@@ -29,8 +29,8 @@
       "props": {
         "headline": "Elegance with Purpose",
         "ctas": [
-          { "label": "Shop Engagement Rings", "href": "#engagement" },
-          { "label": "Shop Jewelry", "href": "#jewelry" }
+          { "label": "Shop Engagement Rings", "href": "/engagement" },
+          { "label": "Shop Jewelry", "href": "/jewelry" }
         ],
         "image": "/storefront/hero.png",
         "imageAlt": "Model wearing diamond bracelets and rings against a mauve backdrop"

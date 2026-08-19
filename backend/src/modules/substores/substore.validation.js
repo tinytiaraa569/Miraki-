@@ -165,6 +165,23 @@ export const updateSubstoreSchema = substoreBody
   .partial()
   .refine((data) => Object.keys(data).length > 0, { message: "No fields to update" })
 
+// Lean picker query — search + small page size only (no status/sort/trash).
+// `ids` (comma-separated) resolves the labels for a known set of substores,
+// e.g. the ones already attached to a brand being edited.
+export const listSubstoreOptionsQuerySchema = z
+  .object({
+    q: z.string().trim().max(120).optional(),
+    page: z.coerce.number().int().min(1).max(10000).optional(),
+    limit: z.coerce.number().int().min(1).max(50).optional(),
+    ids: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => (v ? v.split(",").map((s) => s.trim()).filter(Boolean) : undefined))
+      .refine((arr) => !arr || arr.every((id) => /^[a-f0-9]{24}$/i.test(id)), { message: "Invalid id" }),
+  })
+  .strict()
+
 export const listSubstoresQuerySchema = z
   .object({
     q: z.string().trim().max(120).optional(),

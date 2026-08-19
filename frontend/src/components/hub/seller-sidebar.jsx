@@ -22,9 +22,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import useSWR from "swr"
-import { useSellerAuth } from "@/hooks/use-seller-auth"
+import { useHubAuth } from "@/hooks/use-hub-auth"
 import { useTheme } from "@/hooks/use-theme"
-import { SELLER_NAV, isPathActive } from "@/lib/seller-nav"
+import { canAccessNavItem, filterSellerNav, isPathActive } from "@/lib/seller-nav"
 import { fetcher } from "@/lib/api"
 import { imgUrl } from "@/Server"
 import { cn } from "@/lib/utils"
@@ -89,7 +89,7 @@ const NavRow = memo(function NavRow({ item, isActive, onOpenSubmenu, onNavigated
 })
 
 export function SellerSidebar({ onOpenSubmenu }) {
-  const { user, seller, isOwner, logout } = useSellerAuth()
+  const { user, seller, isOwner, isStoreAdmin, permissions, logout } = useHubAuth()
   const { isMobile, openMobile, setOpenMobile } = useSidebar()
   const { pathname } = useLocation()
   const navigate = useNavigate()
@@ -118,15 +118,17 @@ export function SellerSidebar({ onOpenSubmenu }) {
 
   const filteredNav = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase()
-    if (!q) return SELLER_NAV
-    return SELLER_NAV.map((item) => {
+    const baseNav = filterSellerNav(permissions ?? [], isOwner)
+
+    if (!q) return baseNav
+    return baseNav.map((item) => {
       const parentMatch = item.title.toLowerCase().includes(q)
       const children = item.items?.filter((c) => c.title.toLowerCase().includes(q))
       if (parentMatch) return item
       if (children?.length) return { ...item, items: children }
       return null
     }).filter(Boolean)
-  }, [deferredQuery])
+  }, [deferredQuery, permissions, isOwner])
 
   const closeMobile = useCallback(() => {
     if (isMobile) setOpenMobile(false)
@@ -146,8 +148,8 @@ export function SellerSidebar({ onOpenSubmenu }) {
   })
   const logoUrl = imgUrl(
     theme === "dark"
-      ? (branding?.logoDarkUrl ?? branding?.logoLightUrl ?? seller?.profile?.logoUrl)
-      : (branding?.logoLightUrl ?? seller?.profile?.logoUrl),
+      ? (branding?.logoDarkUrl ?? seller?.profile?.logoDarkUrl ?? branding?.logoLightUrl ?? seller?.profile?.logoLightUrl ?? seller?.profile?.logoUrl)
+      : (branding?.logoLightUrl ?? seller?.profile?.logoLightUrl ?? seller?.profile?.logoUrl),
   )
   // Dedicated square icon for the collapsed rail. Dark mode prefers the dark
   // icon, then the light icon, then falls back to the main logo.
@@ -202,7 +204,7 @@ export function SellerSidebar({ onOpenSubmenu }) {
                     <div className="grid flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
                       <span className="truncate text-sm font-semibold">{seller?.businessName ?? "Seller Hub"}</span>
                       <span className="truncate text-xs text-muted-foreground">
-                        {isOwner ? "Owner" : "Store admin"}
+                        {isOwner ? "Owner" : isStoreAdmin ? "Store admin" : "Team member"}
                       </span>
                     </div>
                   </>
@@ -251,35 +253,39 @@ export function SellerSidebar({ onOpenSubmenu }) {
             </div>
             <SidebarGroupContent>
               <SidebarMenu>
-                {mobileSubmenu.items?.map((child) => {
-                  const active = child.url === activeChildUrl(pathname, mobileSubmenu.items)
-                  return (
-                    <SidebarMenuItem key={child.url}>
-                      <SidebarMenuButton
-                        isActive={active}
-                        asChild
-                        className={cn(
-                          "relative h-9 transition-colors [&>svg]:size-4",
-                          "before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-sidebar-primary before:opacity-0 before:transition-opacity",
-                          "data-[active=true]:bg-sidebar-primary/10 data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:before:opacity-100",
-                          "hover:bg-sidebar-accent",
-                        )}
-                      >
-                        <Link
-                          to={child.url}
-                          aria-current={active ? "page" : undefined}
-                          onClick={() => {
-                            setMobileSubmenu(null)
-                            closeMobile()
-                          }}
+                {mobileSubmenu.items
+                  ?.filter((child) => {
+                    return canAccessNavItem(child, permissions, isOwner)
+                  })
+                  .map((child) => {
+                    const active = child.url === activeChildUrl(pathname, mobileSubmenu.items)
+                    return (
+                      <SidebarMenuItem key={child.url}>
+                        <SidebarMenuButton
+                          isActive={active}
+                          asChild
+                          className={cn(
+                            "relative h-9 transition-colors [&>svg]:size-4",
+                            "before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-sidebar-primary before:opacity-0 before:transition-opacity",
+                            "data-[active=true]:bg-sidebar-primary/10 data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:before:opacity-100",
+                            "hover:bg-sidebar-accent",
+                          )}
                         >
-                          {child.icon ? <child.icon aria-hidden="true" /> : null}
-                          <span>{child.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )
-                })}
+                          <Link
+                            to={child.url}
+                            aria-current={active ? "page" : undefined}
+                            onClick={() => {
+                              setMobileSubmenu(null)
+                              closeMobile()
+                            }}
+                          >
+                            {child.icon ? <child.icon aria-hidden="true" /> : null}
+                            <span>{child.title}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    )
+                  })}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

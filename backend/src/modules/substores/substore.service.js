@@ -86,6 +86,65 @@ export async function listSubstores({ seller, tenantDbName, query }) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// OPTIONS — ultra-lean list for pickers/dropdowns. Returns ONLY _id, name and
+// alias for the seller's live (non-deleted, active) substores, paginated so a
+// picker can lazy-load 5 at a time. Deliberately touches no nested settings /
+// SEO / analytics payloads, so it stays cheap even with many substores.
+// ---------------------------------------------------------------------------
+export async function listSubstoreOptions({ seller, tenantDbName, query }) {
+  assertMultistore(seller)
+  const { Substore } = getTenantModels(tenantDbName)
+
+  const parentStoreId = new mongoose.Types.ObjectId(String(seller.mainStoreId))
+
+  // ID lookup — resolve labels for a known set (e.g. the substores already
+  // attached to a brand). Not paginated and includes soft-deleted rows so a
+  // selected chip always shows a readable name. Still scoped to this seller.
+  if (query.ids?.length) {
+    const rows = await Substore.find({
+      parentStoreId,
+      _id: { $in: query.ids.map((id) => new mongoose.Types.ObjectId(id)) },
+    })
+      .select({ _id: 1, name: 1, alias: 1 })
+      .sort({ name: 1 })
+      .lean()
+    return { rows, total: rows.length, page: 1, limit: rows.length }
+  }
+
+  const page = query.page ?? 1
+  const limit = query.limit ?? 5
+  const match = {
+    parentStoreId,
+    deletedAt: null,
+  }
+  if (query.q) {
+    match.name = { $regex: query.q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" }
+  }
+
+  const [result] = await Substore.aggregate([
+    { $match: match },
+    { $sort: { name: 1 } },
+    {
+      $facet: {
+        rows: [
+          { $skip: (page - 1) * limit },
+          { $limit: limit },
+          { $project: { _id: 1, name: 1, alias: 1 } },
+        ],
+        total: [{ $count: "n" }],
+      },
+    },
+  ])
+
+  return {
+    rows: result?.rows ?? [],
+    total: result?.total?.[0]?.n ?? 0,
+    page,
+    limit,
+  }
+}
+
 export async function getSubstore({ seller, tenantDbName, id }) {
   assertMultistore(seller)
   const { Substore } = getTenantModels(tenantDbName)

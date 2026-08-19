@@ -1,8 +1,5 @@
 import mongoose from "mongoose"
 
-// Platform superadmins. The FIRST one is seeded from ENV at boot (isOriginal: true)
-// and can never be suspended. Additional superadmins are created via the
-// authenticated /platform/superadmins API by an existing superadmin.
 const platformUserSchema = new mongoose.Schema(
   {
     role: {
@@ -15,7 +12,6 @@ const platformUserSchema = new mongoose.Schema(
     email: { type: String, required: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true, select: false },
     status: { type: String, enum: ["active", "suspended"], default: "active" },
-    // Marks the ENV-seeded account. Protected: cannot be suspended.
     isOriginal: { type: Boolean, default: false },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "PlatformUser", default: null },
     // TOTP 2FA — enabled by default, but can be turned off from Settings.

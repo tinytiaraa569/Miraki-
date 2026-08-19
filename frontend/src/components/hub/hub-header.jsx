@@ -34,11 +34,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
-import { useSellerAuth } from "@/hooks/use-seller-auth"
+import { useHubAuth } from "@/hooks/use-hub-auth"
 import { useTheme } from "@/hooks/use-theme"
 import { FONT_OPTIONS, RADIUS_OPTIONS, THEME_PRESETS } from "@/hooks/use-seller-theme"
 import { api, fetcher } from "@/lib/api"
-import { findNavMatch } from "@/lib/seller-nav"
+import { canAccessNavItem, findNavMatch } from "@/lib/seller-nav"
 import { cn } from "@/lib/utils"
 
 /** Derives up-to-two initials from a name or email for the avatar fallback. */
@@ -364,10 +364,10 @@ function ThemePopover() {
  */
 function UserMenu() {
   const navigate = useNavigate()
-  const { user, seller, isOwner, logout } = useSellerAuth()
+  const { user, seller, isOwner, isStoreAdmin, permissions, logout } = useHubAuth()
 
   const displayName = user?.name ?? user?.email ?? "Account"
-  const roleLabel = isOwner ? "Owner" : (user?.role ? "Team member" : null)
+  const roleLabel = isOwner ? "Owner" : isStoreAdmin ? "Store admin" : (user?.role ? "Team member" : null)
 
   async function handleSignOut() {
     await logout()
@@ -375,11 +375,11 @@ function UserMenu() {
   }
 
   const links = [
-    { title: "Dashboard", url: "/hub", icon: LayoutDashboard },
-    { title: "Business Profile", url: "/hub/profile", icon: Building2 },
-    { title: "Team", url: "/hub/team", icon: Users },
-    { title: "Staff Members", url: "/hub/staff", icon: UserCog },
-  ]
+    { title: "Dashboard", url: "/hub", icon: LayoutDashboard, permission: "dashboard.read" },
+    { title: "Business Profile", url: "/hub/profile", icon: Building2, permission: "business_profile.read" },
+    { title: "Team", url: "/hub/team", icon: Users, permission: "team.read" },
+    { title: "Staff Members", url: "/hub/staff", icon: UserCog, permission: "staff_member.read" },
+  ].filter((link) => canAccessNavItem(link, permissions, isOwner))
 
   return (
     <DropdownMenu>
