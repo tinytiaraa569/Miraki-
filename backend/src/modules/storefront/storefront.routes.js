@@ -1,6 +1,5 @@
 import { Router } from "express"
 import { getPublicHead } from "../generalsettings/generalSettings.service.js"
-import { Router } from "express";
 import {
   resolveStorefront,
   resolveSubstore,
@@ -11,7 +10,6 @@ import {
   getStorefrontProduct,
   getStorefrontVariantMedia,
   ensureStorefrontTenant,
-} from "./storefront.service.js"
   applyStorefrontCoupon,
 } from "./storefront.service.js";
 import { applyCouponSchema } from "../coupons/coupon.validation.js";
