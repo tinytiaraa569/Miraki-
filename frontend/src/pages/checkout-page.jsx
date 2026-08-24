@@ -315,10 +315,14 @@ function PaymentSection({ method, setMethod, card, setCard, billingSameAsShippin
 }
 
 function CartSummaryItem({ item }) {
-  const { formatPrice } = useStorefront()
-  const { updateItemQty, removeItem } = useCart()
+const { formatPrice } = useStorefront()
+  const { cart, updateItemQty, removeItem } = useCart()
   const options = item.options || []
-  console.log("CartSummaryItem item", item)
+  const isDiscounted =
+    cart.applicableInfo && !cart.applicableInfo.allItemsEligible &&
+    cart.applicableInfo.eligibleProductIds?.includes(item.productId)
+  
+
 
   return (
     <li className="flex gap-3 py-3">
@@ -341,7 +345,11 @@ function CartSummaryItem({ item }) {
             to={`/product/${item.alias}`}
             className="truncate text-md font-semibold font-['Times-New-Roman'] text-sf-ink"
           >
-            {item.name}
+            {item.name} {isDiscounted ? (
+  <span className="ml-1 text-[10px] font-normal" style={{ color: SF_MAROON }}>
+    · discount applied
+  </span>
+) : null}
           </Link>
           <span className="shrink-0 text-xs font-semibold text-sf-ink">{formatPrice(item.price * item.quantity)}</span>
         </div>
@@ -483,12 +491,18 @@ function CartSummary() {
           <span>Subtotal</span>
           <span>{formatPrice(cart.subtotal)}</span>
         </div>
-        {cart.discount > 0 ? (
-          <div className="flex justify-between" style={{ color: SF_MAROON }}>
-            <span>Discount{cart.coupon ? ` (${cart.coupon.code})` : ""}</span>
-            <span>-{formatPrice(cart.discount)}</span>
-          </div>
-        ) : null}
+       {cart.discount > 0 ? (
+  <div className="flex justify-between" style={{ color: SF_MAROON }}>
+    <span>Discount{cart.coupon ? ` (${cart.coupon.code})` : ""}</span>
+    <span>-{formatPrice(cart.discount)}</span>
+  </div>
+) : null}
+{cart.discount > 0 && cart.applicableInfo && !cart.applicableInfo.allItemsEligible ? (
+  <p className="text-[11px] text-sf-muted -mt-1">
+    Applies to {cart.applicableInfo.eligibleItemsCount} of {cart.applicableInfo.totalItemsCount} items
+    ({formatPrice(cart.applicableInfo.applicableSubtotal)} eligible)
+  </p>
+) : null}
         <div className="flex justify-between">
           <span>Shipping</span>
           <span className="max-w-[60%] text-right text-sf-muted">{shippingLabel}</span>
