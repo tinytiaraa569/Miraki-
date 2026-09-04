@@ -4087,7 +4087,7 @@
 
 import { useRef, useState,useEffect } from "react"
 import { motion, AnimatePresence } from "motion/react"
-import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronRight as ArrowRight, Heart, Menu, Phone, Search, ShoppingBag, SlidersHorizontal, User, X } from "lucide-react"
+import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronRight as ArrowRight, Heart,Play, Lock, Menu, Phone, Search, ShoppingBag, SlidersHorizontal, User, X } from "lucide-react"
 import { imgUrl } from "@/Server"
 import { useStorefront } from "./storefront-context"
 import {
@@ -4099,7 +4099,10 @@ import {
 } from "@/components/ui/sheet"
 import { Slider } from "@/components/ui/slider"
 import { Link } from "react-router-dom"
-import {useCart} from "./cart-context"
+import { useCart } from "@/hooks/cart/use-cart"
+import { useWishlist } from "@/hooks/wishlist/use-wishlist"
+import { pickText } from "@/lib/i18n"
+import { LanguageSwitcher } from "./language-switcher"
 
 /* ---------------------------------------------------------------------------
    Miraki storefront sections. Each component receives the `props` object of
@@ -4112,14 +4115,14 @@ import {useCart} from "./cart-context"
 //   { code: "IN", label: "India" },
 // ]
 
-export function AnnouncementBar({ text, show }) {
+export function AnnouncementBar({ text, show , locale="en" }) {
   // Visibility is controlled from the canvas JSON: the announcement renders
   // ONLY when the section's props include `"show": true`. If the flag is
   // missing or false in the canvas, the bar is hidden in the UI.
   if (show !== true || !text) return null
   return (
     <div className="bg-sf-brand px-4 py-2 text-center text-xs tracking-widest text-sf-brand-foreground uppercase">
-      {text}
+      {pickText(text, locale)}
     </div>
   )
 }
@@ -4146,13 +4149,16 @@ function HeaderLink({ href = "", className, onClick, children }) {
   )
 }
 
-export function Header({ brand, tagline, nav = [], navRight = [], showCountrySwitcher }) {
+export function Header({ brand, tagline, nav = [], navRight = [], showCountrySwitcher ,locale="en" }) {
   const { substore, substores, switchCountry } = useStorefront()
   const [open, setOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [logoFailed, setLogoFailed] = useState(false)
     const searchInputRef = useRef(null)
-    const { itemCount, cartOpen } = useCart()
+    // const { itemCount, cartOpen } = useCart()
+  const { itemCount,open: openCart } = useCart()
+  // const [cartDrawerOpen, setCartDrawerOpen] = useState(false)
+  const {count :wishlistCount} = useWishlist()
 
 
   // Lock body scroll while the mobile drawer is open, and allow Escape to close.
@@ -4210,13 +4216,13 @@ export function Header({ brand, tagline, nav = [], navRight = [], showCountrySwi
             the hamburger + a quick search icon. */}
         <div className="flex flex-1 items-center">
           <nav aria-label="Primary" className="hidden w-full items-center justify-evenly gap-8 lg:flex">
-            {nav.map((item) => (
+            {nav.map((item,index) => (
               <HeaderLink
-                key={item.label}
+                key={index}
                 href={item.href}
                 className="font-sans text-[15px] tracking-wide whitespace-nowrap text-sf-ink transition-colors hover:text-sf-brand"
               >
-                {item.label}
+                {pickText(item.label,locale)}
               </HeaderLink>
             ))}
           </nav>
@@ -4266,13 +4272,13 @@ export function Header({ brand, tagline, nav = [], navRight = [], showCountrySwi
         {/* Right nav + icons */}
         <div className="flex flex-1 items-center justify-end gap-6">
           <nav aria-label="Secondary" className="hidden items-center gap-8 lg:flex">
-            {navRight.map((item) => (
+            {navRight.map((item, index) => (
               <HeaderLink
-                key={item.label}
+                key={index}
                 href={item.href}
                 className="font-sans text-[15px] tracking-wide whitespace-nowrap text-sf-ink transition-colors hover:text-sf-brand"
               >
-                {item.label}
+                {pickText(item.label, locale)}
               </HeaderLink>
             ))}
           </nav>
@@ -4283,6 +4289,7 @@ export function Header({ brand, tagline, nav = [], navRight = [], showCountrySwi
           >
             Search
           </button>
+          <LanguageSwitcher/>
           {showCountrySwitcher && options.length ? (
             <label className="relative flex items-center">
               <span className="sr-only">Store region</span>
@@ -4309,9 +4316,17 @@ export function Header({ brand, tagline, nav = [], navRight = [], showCountrySwi
           <button type="button" aria-label="Account" className="hidden text-sf-ink hover:text-sf-brand sm:block">
             <User className="size-5" aria-hidden="true" />
           </button>
-          <button type="button" aria-label="Wishlist" className="hidden text-sf-ink hover:text-sf-brand sm:block">
+          {/* <button type="button" aria-label="Wishlist" className="hidden text-sf-ink hover:text-sf-brand sm:block">
             <Heart className="size-5" aria-hidden="true" />
-          </button>
+          </button> */}
+          <Link to="/account/wishlist" aria-label={`Wishlist, ${wishlistCount} item${wishlistCount === 1 ? "" : "s"}`} className="hidden relative text-sf-ink hover:text-sf-brand sm:block">
+          <Heart className="size-5" aria-hidden="true" />
+            {wishlistCount > 0 ? (
+              <span aria-hidden="true" className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-sf-brand font-sans text-[10px] leading-none text-sf-brand-foreground">
+                {wishlistCount > 9 ? "9+" : wishlistCount}
+              </span>
+            ) : null}
+          </Link>
           {/* <button type="button" aria-label="Shopping bag, 1 item" className="relative text-sf-ink hover:text-sf-brand">
             <ShoppingBag className="size-5" aria-hidden="true" />
             <span
@@ -4321,21 +4336,22 @@ export function Header({ brand, tagline, nav = [], navRight = [], showCountrySwi
               1
             </span>
           </button> */}
-          <button
+         <button
             type="button"
-            onClick={cartOpen}
+            onClick={openCart}
             aria-label={`Shopping bag, ${itemCount} item${itemCount === 1 ? "" : "s"}`}
             className="relative text-sf-ink hover:text-sf-brand"
           >
             <ShoppingBag className="size-5" aria-hidden="true" />
-            {itemCount > 0 ? (
+
+            {itemCount > 0 && (
               <span
                 aria-hidden="true"
                 className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-sf-brand font-sans text-[10px] leading-none text-sf-brand-foreground"
               >
                 {itemCount > 9 ? "9+" : itemCount}
               </span>
-            ) : null}
+            )}
           </button>
         </div>
       </div>
@@ -4393,9 +4409,9 @@ export function Header({ brand, tagline, nav = [], navRight = [], showCountrySwi
                   closed: {},
                 }}
               >
-                {[...nav, ...navRight].map((item) => (
+                {[...nav, ...navRight].map((item,index) => (
                   <motion.li
-                    key={item.label}
+                    key={index}
                     variants={{
                       closed: { opacity: 0, x: -24 },
                       open: { opacity: 1, x: 0 },
@@ -4407,7 +4423,7 @@ export function Header({ brand, tagline, nav = [], navRight = [], showCountrySwi
                       onClick={() => setOpen(false)}
                       className="group flex items-center justify-between border-b border-sf-line/60 px-6 py-4 font-sans text-base tracking-wide text-sf-ink transition-colors hover:bg-sf-line/30 hover:text-sf-brand"
                     >
-                      {item.label}
+                      {pickText(item.label, locale)}
                       <ArrowRight
                         className="size-4 -translate-x-1 text-sf-rose opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100"
                         aria-hidden="true"
@@ -4435,6 +4451,7 @@ export function Header({ brand, tagline, nav = [], navRight = [], showCountrySwi
                   <Heart className="size-5" aria-hidden="true" />
                   Wishlist
                 </button>
+                
               </div>
             </motion.nav>
           </motion.div>
@@ -4516,34 +4533,33 @@ export function Header({ brand, tagline, nav = [], navRight = [], showCountrySwi
   )
 }
 
+export function Hero({ headline, ctas = [], image, imageAlt, locale = "en" }) {
 
-export function Hero({ headline, ctas = [], image, imageAlt }) {
   return (
-    <section className="relative isolate min-h-[70vh] overflow-hidden lg:min-h-[85vh]">
-      {/* LCP image: eager + high priority + explicit dimensions = fast paint, zero CLS */}
+    <section dir="ltr" className="relative isolate min-h-[70vh] overflow-hidden lg:min-h-[85vh]">
       <img
         src={image || "/placeholder.svg"}
-        alt={imageAlt || ""}
+        alt={pickText(imageAlt, locale)}
         width="1600"
         height="900"
         fetchPriority="high"
         decoding="async"
         className="absolute inset-0 size-full object-cover object-[70%_center]"
       />
-      <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-transparent" aria-hidden="true" />
-      <div className="relative mx-auto flex min-h-[70vh] max-w-7xl items-center px-4 lg:min-h-[85vh] lg:px-8">
+      <div  className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-transparent" aria-hidden="true" />
+      <div  className="relative mx-auto flex min-h-[70vh] max-w-7xl items-center px-4 lg:min-h-[85vh] lg:px-8">
         <div className="max-w-xl">
           <h1 className="font-sf-display text-4xl font-medium tracking-[0.18em] text-white uppercase text-balance md:text-5xl lg:text-6xl">
-            {headline}
+            {pickText(headline, locale)}
           </h1>
           <div className="mt-8 flex flex-col items-start gap-4">
-            {ctas.map((cta) => (
+            {ctas.map((cta, i) => (
               <a
-                key={cta.label}
+                key={cta.href || i}
                 href={cta.href}
                 className="text-lg text-white underline underline-offset-8 transition-opacity hover:opacity-75"
               >
-                {cta.label}
+                {pickText(cta.label, locale)}
               </a>
             ))}
           </div>
@@ -4553,7 +4569,7 @@ export function Hero({ headline, ctas = [], image, imageAlt }) {
   )
 }
 
-export function CategoryTiles({ title, sub, cta, items = [] }) {
+export function CategoryTiles({ title, sub, cta, items = [] ,locale = "en"}) {
   const scrollerRef = useRef(null)
 
   const scrollBy = (dir) => {
@@ -4578,7 +4594,7 @@ export function CategoryTiles({ title, sub, cta, items = [] }) {
         {/* Invisible left spacer balances the right rule so the heading stays centered */}
         <span aria-hidden="true" className="h-[2px] flex-1 opacity-0" />
         <h2 className="shrink-0 text-center font-sf-display text-lg font-semibold tracking-[0.2em] text-sf-brand uppercase text-balance sm:tracking-[0.3em] md:text-2xl lg:text-3xl lg:tracking-[0.35em]">
-          {title}
+         {pickText(title, locale)}
         </h2>
         <span aria-hidden="true" className="h-[2px] flex-1 bg-sf-brand" />
       </motion.div>
@@ -4607,9 +4623,9 @@ export function CategoryTiles({ title, sub, cta, items = [] }) {
             ref={scrollerRef}
             className="flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-2 lg:gap-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
-            {items.map((item) => (
+            {items.map((item,index) => (
               <a
-                key={item.name}
+                key={index}
                 href={item.href}
                 className="group block w-[70%] shrink-0 snap-start sm:w-[45%] lg:w-[calc((100%-3rem)/3)]"
               >
@@ -4641,7 +4657,7 @@ export function CategoryTiles({ title, sub, cta, items = [] }) {
                   ) : null}
                 </div>
                 <p className="mt-3 text-center font-sf-display text-xl text-sf-ink group-hover:text-sf-brand">
-                  {item.name}
+                  {pickText(item.name, locale)}
                 </p>
               </a>
             ))}
@@ -4650,7 +4666,7 @@ export function CategoryTiles({ title, sub, cta, items = [] }) {
 
         {sub ? (
           <p className="mx-auto mt-12 max-w-none text-center font-sf-display text-xl leading-relaxed text-sf-ink text-pretty sm:text-2xl lg:whitespace-nowrap">
-            {sub}
+            {pickText(sub, locale)}
           </p>
         ) : null}
         {cta ? (
@@ -4659,7 +4675,7 @@ export function CategoryTiles({ title, sub, cta, items = [] }) {
               href={cta.href}
               className="inline-block border border-sf-brand px-8 py-3 text-sm tracking-widest text-sf-brand uppercase transition-colors hover:bg-sf-brand hover:text-sf-brand-foreground"
             >
-              {cta.label}
+              {pickText(cta.label, locale)}
             </a>
           </div>
         ) : null}
@@ -4675,6 +4691,7 @@ export function CategoryTiles({ title, sub, cta, items = [] }) {
  * four tall editorial tiles whose underlined serif label sits over the image.
  * Content defaults to the four core collections but can be overridden via props.
  */
+
 const DEFAULT_COLLECTION_ITEMS = [
   { name: "Rings", image: "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/66ecfb4f72d5790036baa0d6/img_70.jpg", href: "#rings" },
   { name: "Earrings", image: "https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/66ecfbdd57e7920032d620a4/img_58.jpg", href: "#earrings" },
@@ -4763,7 +4780,7 @@ export function CollectionShowcase({
   )
 }
 
-export function StoryBand({ title, eyebrow, cards = [] }) {
+export function StoryBand({ title, eyebrow, cards = [], locale = "en" }) {
   return (
     <section id="engagement" className="overflow-x-clip bg-sf-bg py-16 lg:py-24">
       {/* Staggered decorative heading: title slides in from the left, eyebrow from the right */}
@@ -4778,7 +4795,7 @@ export function StoryBand({ title, eyebrow, cards = [] }) {
         >
           <span aria-hidden="true" className="h-[2px] flex-1 bg-sf-brand" />
           <h2 className="shrink-0 text-center font-sf-display text-lg font-semibold tracking-[0.2em] text-sf-brand uppercase text-balance sm:tracking-[0.3em] md:text-2xl lg:text-3xl lg:tracking-[0.35em]">
-            {title}
+            {pickText(title, locale)}
           </h2>
           <span aria-hidden="true" className="h-[2px] flex-1 opacity-0" />
         </motion.div>
@@ -4806,7 +4823,7 @@ export function StoryBand({ title, eyebrow, cards = [] }) {
         {cards.map((card, i) => {
           const reversed = i % 2 === 1
           return (
-            <div key={card.title} className="grid items-center gap-8 lg:grid-cols-2 lg:gap-16">
+            <div key={i} className="grid items-center gap-8 lg:grid-cols-2 lg:gap-16">
               {/* Image */}
               <motion.div
                 className={`group overflow-hidden ${reversed ? "lg:order-2" : ""}`}
@@ -4841,10 +4858,10 @@ export function StoryBand({ title, eyebrow, cards = [] }) {
                   </span>
                 </div>
                 <h3 className="font-sf-display text-3xl leading-tight text-sf-brand text-balance md:text-4xl">
-                  {card.title}
+                  {pickText(card.title, locale)}
                 </h3>
                 <div className="mt-5 flex max-w-md flex-col gap-4">
-                  {String(card.sub || "")
+                  {String(pickText(card.sub, locale) || "")
                     .split("\n\n")
                     .filter(Boolean)
                     .map((para, p) => (
@@ -4858,7 +4875,7 @@ export function StoryBand({ title, eyebrow, cards = [] }) {
                     href={card.cta.href}
                     className="mt-8 inline-block border border-sf-brand px-8 py-3 text-sm tracking-widest text-sf-brand uppercase transition-colors hover:bg-sf-brand hover:text-sf-brand-foreground"
                   >
-                    {card.cta.label}
+                    {pickText(card.cta.label, locale)}
                   </a>
                 ) : null}
               </motion.div>
@@ -4870,7 +4887,7 @@ export function StoryBand({ title, eyebrow, cards = [] }) {
   )
 }
 
-export function ProductCarousel({ title, sub, tabs = [], products = [] }) {
+export function ProductCarousel({ title, sub, tabs = [], products = [],locale = "en" }) {
   const { formatPrice } = useStorefront()
   const [activeTab, setActiveTab] = useState(0)
 
@@ -4887,7 +4904,7 @@ export function ProductCarousel({ title, sub, tabs = [], products = [] }) {
         >
           <span aria-hidden="true" className="h-[2px] flex-1 bg-sf-brand" />
           <h2 className="shrink-0 text-center font-sf-display text-lg font-semibold tracking-[0.2em] text-sf-brand uppercase text-balance sm:tracking-[0.3em] md:text-2xl lg:text-3xl lg:tracking-[0.35em]">
-            {title}
+            {pickText(title, locale)}
           </h2>
           <span aria-hidden="true" className="h-[2px] flex-1 opacity-0" />
         </motion.div>
@@ -4902,7 +4919,7 @@ export function ProductCarousel({ title, sub, tabs = [], products = [] }) {
           >
             <span aria-hidden="true" className="h-px flex-1 opacity-0" />
             <span className="shrink-0 text-center font-sf-display text-sm tracking-[0.25em] text-sf-brand/80 uppercase italic sm:tracking-[0.35em] md:text-base">
-              {sub}
+              {pickText(sub, locale)}
             </span>
             <span aria-hidden="true" className="h-px flex-1 bg-sf-brand/60" />
           </motion.div>
@@ -4911,12 +4928,12 @@ export function ProductCarousel({ title, sub, tabs = [], products = [] }) {
 
       <div className="mx-auto max-w-7xl px-4 lg:px-8">
       <div className="mx-auto mt-10 grid max-w-7xl grid-cols-1 gap-6 sm:grid-cols-2 lg:gap-8">
-        {products.map((product) => {
+        {products.map((product, index) => {
           const restImg = product.mainImg || product.image || "/placeholder.svg"
           const hoverImg = product.hoveredImg || product.hoverImage || null
           const label = product.category || product.name
           return (
-            <article key={product.name} className="group">
+            <article key={index} className="group">
               <div className="relative aspect-[4/5] overflow-hidden bg-sf-surface">
                 {/* Rest image — dimmed + slightly desaturated, fades out on hover when an alternate exists */}
                 <img
@@ -4951,7 +4968,7 @@ export function ProductCarousel({ title, sub, tabs = [], products = [] }) {
                 {/* Centered category label overlay */}
                 <div className="absolute inset-0 z-20 flex items-center justify-center">
                   <span className="border-b border-white/80 pb-1 font-sf-display text-xl tracking-[0.2em] text-white uppercase text-balance drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)] transition-all duration-500 group-hover:tracking-[0.3em] md:text-2xl">
-                    {label}
+                    {pickText(label, locale)}
                   </span>
                 </div>
               </div>
@@ -4964,11 +4981,12 @@ export function ProductCarousel({ title, sub, tabs = [], products = [] }) {
   )
 }
 
-export function BannerDuo({ items = [] }) {
+export function BannerDuo({ items = [],locale = "en" }) {
   return (
     <section id="bespoke" className="mx-auto grid max-w-7xl gap-6 px-4 pb-16 md:grid-cols-2 lg:px-8 lg:pb-24">
       {items.map((item) => (
-        <article key={item.title} className="group relative isolate overflow-hidden">
+        <article key={item.image} className="group relative isolate overflow-hidden">
+          
           <img
             src={item.image || "/placeholder.svg"}
             alt={item.title}
@@ -4979,14 +4997,14 @@ export function BannerDuo({ items = [] }) {
             className="aspect-[10/7] w-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
           <div className="absolute inset-0 flex flex-col items-start justify-end gap-2 bg-gradient-to-t from-black/70 via-black/20 to-transparent p-6 lg:p-8">
-            <h3 className="font-sf-display text-2xl text-white md:text-3xl">{item.title}</h3>
-            <p className="max-w-sm leading-relaxed text-white/85 text-pretty">{item.sub}</p>
+            <h3 className="font-sf-display text-2xl text-white md:text-3xl">{pickText(item.title, locale)}</h3>
+            <p className="max-w-sm leading-relaxed text-white/85 text-pretty">{pickText(item.sub, locale)}</p>
             {item.cta ? (
               <a
                 href={item.cta.href}
                 className="mt-2 text-sm tracking-widest text-white uppercase underline underline-offset-4 hover:opacity-75"
               >
-                {item.cta.label}
+                {pickText(item.cta.label, locale)}
               </a>
             ) : null}
           </div>
@@ -4996,21 +5014,21 @@ export function BannerDuo({ items = [] }) {
   )
 }
 
-export function Testimonials({ title, items = [] }) {
+export function Testimonials({ title, items = [], locale = "en" }) {
   return (
     <section className="bg-sf-brand py-16 lg:py-20">
       <div className="mx-auto max-w-7xl px-4 lg:px-8">
         <h2 className="text-center font-sf-display text-3xl font-medium tracking-wide text-sf-brand-foreground text-balance md:text-4xl">
-          {title}
+          {pickText(title, locale)}
         </h2>
         <div className="mt-10 grid gap-8 md:grid-cols-3">
-          {items.map((item) => (
-            <figure key={item.author} className="flex flex-col gap-4 text-center">
+          {items.map((item, index) => (
+            <figure key={index} className="flex flex-col gap-4 text-center">
               <blockquote className="font-sf-display text-xl leading-relaxed text-sf-brand-foreground text-pretty">
-                &ldquo;{item.quote}&rdquo;
+                &ldquo;{pickText(item.quote, locale)}&rdquo;
               </blockquote>
               <figcaption className="text-sm tracking-widest text-sf-brand-foreground/70 uppercase">
-                {item.author}
+                {pickText(item.author, locale)}
               </figcaption>
             </figure>
           ))}
@@ -5020,7 +5038,65 @@ export function Testimonials({ title, items = [] }) {
   )
 }
 
-export function Footer({ newsletterTitle, newsletterCta, columns = [], copyright }) {
+export function TermsAndConditions({ title = "Terms & Conditions", updatedLabel, intro, sections = [] }) {
+  const [activeId, setActiveId] = useState(sections[0]?.id ?? "")
+
+  const scrollToSection = (id) => {
+    setActiveId(id)
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
+
+  return (
+    <section className="bg-sf-bg py-16 lg:py-24">
+      <div className="mx-auto max-w-7xl px-4 lg:px-8">
+        <div className="flex items-center gap-4 sm:gap-8">
+          <span aria-hidden="true" className="h-px flex-1 bg-sf-brand" />
+          <h1 className="shrink-0 text-center font-sf-display text-3xl font-bold tracking-wide text-sf-brand text-balance md:text-4xl">
+            {title}
+          </h1>
+          <span aria-hidden="true" className="h-px flex-1 bg-sf-brand" />
+        </div>
+
+        {updatedLabel ? (
+          <p className="mt-4 text-center text-sm tracking-wide text-sf-muted uppercase">{updatedLabel}</p>
+        ) : null}
+
+        {intro ? (
+          <p className="mt-8  text-center text-base leading-relaxed text-sf-muted text-pretty">
+            {intro}
+          </p>
+        ) : null}
+
+        <div className="mt-14 flex flex-col gap-10 lg:flex-row lg:gap-16">
+   
+
+          {/* Clauses */}
+          <div className="min-w-0 flex-1 divide-y divide-sf-brand/10">
+            {sections.map((s, i) => (
+              <div key={s.id} id={s.id} className="scroll-mt-28 py-8 first:pt-0">
+                <h2 className="font-sf-display text-xl font-semibold tracking-wide text-sf-brand md:text-2xl">
+                  {s.heading}
+                </h2>
+                <div className="mt-4 flex flex-col gap-4">
+                  {String(s.body || "")
+                    .split("\n\n")
+                    .filter(Boolean)
+                    .map((para, p) => (
+                      <p key={p} className="text-base leading-relaxed text-sf-muted text-pretty">
+                        {para}
+                      </p>
+                    ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+export function Footer({ newsletterTitle, newsletterCta,placeholder, columns = [], copyright, locale = "en" }) {
   const [email, setEmail] = useState("")
   const [subscribed, setSubscribed] = useState(false)
 
@@ -5034,7 +5110,7 @@ export function Footer({ newsletterTitle, newsletterCta, columns = [], copyright
       <div className="mx-auto max-w-7xl px-4 py-14 lg:px-8">
         {/* Newsletter */}
         <div className="mx-auto max-w-lg text-center">
-          <h2 className="font-sf-display text-2xl text-sf-ink text-balance">{newsletterTitle}</h2>
+          <h2 className="font-sf-display text-2xl text-sf-ink text-balance">{pickText(newsletterTitle, locale)}</h2>
           {subscribed ? (
             <p className="mt-4 text-sf-brand">{"Thank you for subscribing — see you in your inbox."}</p>
           ) : (
@@ -5048,14 +5124,14 @@ export function Footer({ newsletterTitle, newsletterCta, columns = [], copyright
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="Your email"
+                placeholder={pickText(placeholder, locale) || "Enter your email"}
                 className="min-w-0 flex-1 border border-sf-line bg-sf-bg px-4 py-3 text-sf-ink placeholder:text-sf-muted focus:border-sf-brand focus:outline-none"
               />
               <button
                 type="submit"
                 className="shrink-0 bg-sf-brand px-6 py-3 text-sm tracking-widest text-sf-brand-foreground uppercase transition-opacity hover:opacity-90"
               >
-                {newsletterCta}
+                {pickText(newsletterCta, locale)}
               </button>
             </form>
           )}
@@ -5063,14 +5139,14 @@ export function Footer({ newsletterTitle, newsletterCta, columns = [], copyright
 
         {/* Link columns */}
         <div className="mt-14 grid gap-10 sm:grid-cols-3">
-          {columns.map((col) => (
-            <nav key={col.title} aria-label={col.title}>
-              <h3 className="text-sm font-medium tracking-widest text-sf-ink uppercase">{col.title}</h3>
+          {columns.map((col, index) => (
+            <nav key={index} aria-label={pickText(col.title, locale)}>
+              <h3 className="text-sm font-medium tracking-widest text-sf-ink uppercase">{pickText(col.title, locale)}</h3>
               <ul className="mt-4 flex flex-col gap-2">
                 {col.links.map((link) => (
-                  <li key={link.label}>
+                  <li key={link.href}>
                     <a href={link.href} className="text-sf-muted transition-colors hover:text-sf-brand">
-                      {link.label}
+                      {pickText(link.label, locale)}
                     </a>
                   </li>
                 ))}
@@ -5079,7 +5155,7 @@ export function Footer({ newsletterTitle, newsletterCta, columns = [], copyright
           ))}
         </div>
 
-        <p className="mt-14 border-t border-sf-line pt-6 text-center text-sm text-sf-muted">{copyright}</p>
+        <p className="mt-14 border-t border-sf-line pt-6 text-center text-sm text-sf-muted">{pickText(copyright, locale)}</p>
       </div>
     </footer>
   )
@@ -5502,13 +5578,14 @@ function FilterFacets({
   )
 }
 
-export function JewelryCollection({ tabs = [], products = [], priceRanges = [], loading = false }) {
+export function JewelryCollection({ tabs = [], products = [], priceRanges = [], loading = false , locale="en"}) {
   const { formatPrice } = useStorefront()
+  const { toggle: toggleWishlist, isInWishlist } = useWishlist()
   const [activeCat, setActiveCat] = useState("All")
   const [sort, setSort] = useState("featured")
   const [filtersOpen, setFiltersOpen] = useState(true)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
-  const [wishlist, setWishlist] = useState(() => new Set())
+  // const [wishlist, setWishlist] = useState(() => new Set())
   const [shapes, setShapes] = useState(() => new Set())
   const [gems, setGems] = useState(() => new Set())
   const [metals, setMetals] = useState(() => new Set())
@@ -5527,7 +5604,8 @@ export function JewelryCollection({ tabs = [], products = [], priceRanges = [], 
   const priceActive = price && (price[0] > priceFloor || price[1] < priceCeil)
   const priceValue = price ?? [priceFloor, priceCeil]
 
-  const categories = ["All", ...tabs]
+  const categories = ["All", ...tabs.map((t) => (typeof t === "string" ? t : pickText(t, locale)))]
+
 
   const toggleFrom = (setter) => (value) =>
     setter((prev) => {
@@ -5535,7 +5613,7 @@ export function JewelryCollection({ tabs = [], products = [], priceRanges = [], 
       next.has(value) ? next.delete(value) : next.add(value)
       return next
     })
-  const toggleWishlist = toggleFrom(setWishlist)
+  // const toggleWishlist = toggleFrom(setWishlist)
   const toggleShape = toggleFrom(setShapes)
   const toggleGem = toggleFrom(setGems)
   const toggleMetal = toggleFrom(setMetals)
@@ -5698,7 +5776,7 @@ export function JewelryCollection({ tabs = [], products = [], priceRanges = [], 
               }`}
             >
               {shown.map((product) => {
-                const wished = wishlist.has(product.name)
+                const wished = isInWishlist(product._id || product.id)
                 const href = product.alias ? `/product/${product.alias}` : null
                 const Card = href ? Link : "article"
                 const cardProps = href ? { to: href } : {}
@@ -5718,7 +5796,7 @@ export function JewelryCollection({ tabs = [], products = [], priceRanges = [], 
                         type="button"
                         onClick={(e) => {
                           e.preventDefault()
-                          toggleWishlist(product.name)
+                          toggleWishlist(product)
                         }}
                         aria-label={wished ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
                         aria-pressed={wished}
@@ -5790,6 +5868,199 @@ export function JewelryCollection({ tabs = [], products = [], priceRanges = [], 
   )
 }
 
+
+const DEFAULT_EXPRESS_CHECKOUT = [
+  { id: "apple_pay", label: "Apple Pay", icon: "/images/payment/apple-pay.svg" },
+  { id: "paypal", label: "PayPal", icon: "/images/payment/paypal.svg" },
+]
+
+const DEFAULT_PAYMENT_METHODS = [
+  { id: "card", type: "card", label: "Credit Card", icon: "lock", enabled: true },
+  { id: "afterpay", type: "afterpay", label: "Afterpay", badge: "A", badgeColor: "#B2FCE4", badgeTextColor: "#000000", shape: "rounded", enabled: true },
+  { id: "affirm", type: "affirm", label: "Affirm", badge: "a", badgeColor: "#4A4AF4", badgeTextColor: "#FFFFFF", shape: "circle", enabled: true },
+  { id: "link", type: "link", label: "Link", icon: "play", enabled: true },
+]
+
+export function ExpressCheckout({ items = DEFAULT_EXPRESS_CHECKOUT }) {
+  const list = items?.length ? items : DEFAULT_EXPRESS_CHECKOUT
+  if (!list.length) return null
+
+  return (
+    <section className="flex flex-col gap-4">
+      <h2 className="text-center text-xl font-['Times-New-Roman'] font-semibold text-sf-ink">
+        Express Checkout
+      </h2>
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: `repeat(${list.length}, minmax(0, 1fr))` }}
+      >
+        {list.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className="flex h-11 items-center justify-center gap-1.5 rounded-md bg-white text-sm font-medium border border-black"
+          >
+            <img
+              src={item.icon || "/placeholder.svg"}
+              alt={item.label}
+              width="96"
+              height="96"
+              loading="lazy"
+              className="h-12 w-auto transition-opacity"
+            />
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-3 text-md font-['Times-New-Roman'] font-semibold">
+        <div className="h-px flex-1 bg-sf-brand/15" />
+        OR
+        <div className="h-px flex-1 bg-sf-brand/15" />
+      </div>
+    </section>
+  )
+}
+
+function PaymentMethodIcon({ method }) {
+  if (method.icon === "lock") {
+    return <Lock className="size-3.5 text-sf-muted" aria-hidden="true" />
+  }
+  if (method.icon === "play") {
+    return <Play className="size-3.5 text-sf-muted" aria-hidden="true" />
+  }
+  if (method.badge) {
+    const shapeClass = method.shape === "circle" ? "rounded-full" : "rounded"
+    return (
+      <span
+        className={`grid size-5 place-items-center ${shapeClass} text-[10px] font-bold`}
+        style={{ backgroundColor: method.badgeColor, color: method.badgeTextColor }}
+      >
+        {method.badge}
+      </span>
+    )
+  }
+  return null
+}
+
+function PaymentMethodOption({ icon, label, active, onSelect }) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`flex w-full items-center gap-3 rounded-md border px-4 py-3 text-sm text-sf-ink transition-colors ${
+        active ? "border-sf-brand" : "border-sf-brand/20"
+      }`}
+    >
+      <span
+        className={`grid size-5 shrink-0 place-items-center rounded-full border-2 ${
+          active ? "border-sf-brand" : "border-sf-muted/40"
+        }`}
+      >
+        {active ? <span className="size-2 rounded-full bg-sf-brand" /> : null}
+      </span>
+      {icon}
+      {label}
+    </button>
+  )
+}
+
+function SfTextField({ placeholder, className = "", ...props }) {
+  return (
+    <input
+      placeholder={placeholder}
+      className={`h-10 w-full rounded-md border border-sf-brand/25 bg-transparent px-3 text-sm text-sf-ink outline-none placeholder:text-sf-muted focus:border-sf-brand ${className}`}
+      {...props}
+    />
+  )
+}
+
+function SfCheckboxRow({ label, checked, onChange }) {
+  return (
+    <label className="flex items-center gap-2 text-xs text-sf-muted">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="size-3.5 rounded border-sf-brand/40 accent-sf-brand"
+      />
+      {label}
+    </label>
+  )
+}
+
+
+export function PaymentOptions({
+  methods = DEFAULT_PAYMENT_METHODS,
+  secureNote = "Secure and Encrypted",
+  method,
+  setMethod,
+  card,
+  setCard,
+  billingSameAsShipping,
+  setBillingSameAsShipping,
+  agreed,
+  setAgreed,
+}) {
+  const enabledMethods = methods?.filter((m) => m.enabled !== false)?.length
+    ? methods.filter((m) => m.enabled !== false)
+    : DEFAULT_PAYMENT_METHODS
+
+  const setCardField = (key, value) => setCard?.((c) => ({ ...c, [key]: value }))
+
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="text-sm font-semibold text-sf-ink">Payment Options</h2>
+
+      {enabledMethods.map((m) => (
+        <div key={m.id} className="flex flex-col gap-3">
+          <PaymentMethodOption
+            icon={<PaymentMethodIcon method={m} />}
+            label={m.label}
+            active={method === m.id}
+            onSelect={() => setMethod?.(m.id)}
+          />
+
+          {m.type === "card" && method === m.id ? (
+            <div className="flex flex-col gap-3 rounded-md border border-sf-brand/15 p-3">
+              <div className="relative">
+                <SfTextField
+                  placeholder="Card Number"
+                  value={card?.number ?? ""}
+                  onChange={(e) => setCardField("number", e.target.value)}
+                  className="pr-9"
+                />
+                <Lock
+                  className="pointer-events-none absolute right-3 top-1/2 size-3.5 -translate-y-1/2 text-sf-muted"
+                  aria-hidden="true"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <SfTextField placeholder="MM" value={card?.expMonth ?? ""} onChange={(e) => setCardField("expMonth", e.target.value)} />
+                <SfTextField placeholder="YY" value={card?.expYear ?? ""} onChange={(e) => setCardField("expYear", e.target.value)} />
+                <SfTextField placeholder="CVV" value={card?.cvv ?? ""} onChange={(e) => setCardField("cvv", e.target.value)} />
+              </div>
+              <SfTextField
+                placeholder="Name on the Card"
+                value={card?.name ?? ""}
+                onChange={(e) => setCardField("name", e.target.value)}
+              />
+              <SfCheckboxRow
+                label="Use shipping address as billing address"
+                checked={billingSameAsShipping}
+                onChange={setBillingSameAsShipping}
+              />
+            </div>
+          ) : null}
+        </div>
+      ))}
+
+      <p className="mt-1 text-xs text-sf-muted">{secureNote}</p>
+
+      <SfCheckboxRow label="I agree to the terms and conditions" checked={agreed} onChange={setAgreed} />
+    </section>
+  )
+}
+
+
 /** Section registry: canvas `type` → component. Unknown types render nothing. */
 export const SECTION_REGISTRY = {
   announcement: AnnouncementBar,
@@ -5802,7 +6073,9 @@ export const SECTION_REGISTRY = {
   productCarousel: ProductCarousel,
   productGrid: JewelryCollection,
   bannerDuo: BannerDuo,
+  //  paymentOptions: PaymentOptions,  
   testimonials: Testimonials,
+  // termsAndConditions: TermsAndConditions,
   footer: Footer,
 }
 

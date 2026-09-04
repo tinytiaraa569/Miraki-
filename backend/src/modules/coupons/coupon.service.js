@@ -608,3 +608,62 @@ const result = await previewCouponForCart({ sellerId: seller._id, tenantDbName, 
 
   return result;
 }
+
+
+
+function formatDiscountLabel(coupon) {
+  if (coupon.discountType === "percentage") {
+    return coupon.maxDiscount != null
+      ? `${coupon.amount}% off (up to ${coupon.maxDiscount})`
+      : `${coupon.amount}% off`;
+  }
+  return `${coupon.amount} off`;
+}
+
+export async function listPublicCoupons({ tenantDbName, sellerId, substoreId }) {
+  const { Coupon } = getTenantModels(tenantDbName);
+  const now = new Date();
+
+  const match = {
+    sellerId,
+    deletedAt: null,
+    enabled: true,
+    isPrivate: { $ne: true },
+    $and: [
+      { $or: [{ startDate: null }, { startDate: { $exists: false } }, { startDate: { $lte: now } }] },
+      { $or: [{ endDate: null }, { endDate: { $exists: false } }, { endDate: { $gte: now } }] },
+    ],
+  };
+  if (substoreId) {
+    match.$or = [{ substoreIds: { $size: 0 } }, { substoreIds: { $exists: false } }, { substoreIds: substoreId }];
+  }
+
+  const docs = await Coupon.find(match)
+    .select({
+      code: 1,
+      name: 1,
+      description: 1,
+      discountType: 1,
+      amount: 1,
+      maxDiscount: 1,
+      minOrderAmount: 1,
+      maxUsage: 1,
+      currentUsage: 1,
+      conditions: 1,
+      endDate: 1,
+    })
+    .sort({ createdAt: -1 })
+    .limit(20)
+    .lean();
+
+  return docs
+    .filter((c) => c.maxUsage == null || c.currentUsage < c.maxUsage)
+    .map((c) => ({
+      code: c.code,
+      description: c.description || c.name || null,
+      displayDiscount: formatDiscountLabel(c),
+      minOrderHint: c.minOrderAmount ? `Min order ${c.minOrderAmount}` : null,
+      hasConditions: (c.conditions || []).length > 0,
+      endDate: c.endDate || null,
+    }));
+}

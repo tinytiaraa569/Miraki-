@@ -18,6 +18,7 @@ import { permissionSchema } from "../modules/permissions/permission.model.js"
 import { roleSchema } from "../modules/roles/role.model.js"
 import { storeAdminSchema } from "../modules/storeadmins/storeadmin.model.js"
 import {couponSchema} from "../modules/coupons/coupon.model.js"
+import { businessModeSchema } from "../modules/businessmode/businessmode.model.js"
 
 // -----------------------------------------------------------------------------
 // DATABASE-PER-TENANT MULTI-TENANCY
@@ -97,6 +98,7 @@ export function getTenantModels(dbName) {
       conn.models.GeneralSettings || conn.model("GeneralSettings", generalSettingsSchema, "generalsettings"),
     StoreAdmin : conn.models.StoreAdmin || conn.model("StoreAdmin", storeAdminSchema, "storeadmins"),
     Coupon : conn.models.Coupon || conn.model("Coupon", couponSchema, "coupons"),
+    BusinessMode: conn.models.BusinessMode || conn.model("BusinessMode", businessModeSchema,"businessMode"),
   }
 
   modelCache.set(dbName, models)
