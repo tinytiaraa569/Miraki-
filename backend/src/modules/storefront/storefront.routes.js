@@ -11,8 +11,8 @@ import {
   getStorefrontVariantMedia,
   ensureStorefrontTenant,
   applyStorefrontCoupon,
+  listStorefrontAvailableCoupons,
 } from "./storefront.service.js"
-  
 import { applyCouponSchema } from "../coupons/coupon.validation.js";
 
 // PUBLIC, read-only storefront resolver — no auth, safe by construction:
@@ -122,6 +122,17 @@ storefrontRoutes.post("/coupons/apply", async (req, res, next) => {
       items: parsed.data.items,
       countryCode: detectCountry(req),
     });
+    res.json(payload);
+  } catch (err) {
+    next(err);
+  }
+});
+
+storefrontRoutes.get("/coupons/available", async (req, res, next) => {
+  try {
+    const payload = await listStorefrontAvailableCoupons(detectCountry(req));
+    res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+    res.set("Vary", "Cookie, x-vercel-ip-country, cf-ipcountry");
     res.json(payload);
   } catch (err) {
     next(err);

@@ -28,7 +28,7 @@ function StorefrontSkeleton() {
 }
 
 function CanvasRenderer() {
-  const { canvas, substore, isLoading, error } = useStorefront()
+  const { canvas, substore, isLoading, error ,locale} = useStorefront()
 
   // Per-substore document title (e.g. "Miraki Jewels — Oman").
   useEffect(() => {
@@ -51,7 +51,7 @@ function CanvasRenderer() {
       {canvas.sections.map((section, i) => {
         const Component = SECTION_REGISTRY[section.type]
         if (!Component) return null
-        return <Component key={`${section.type}-${i}`} {...section.props} />
+        return <Component key={`${section.type}-${i}`} {...section.props} locale={locale} />
       })}
     </div>
   )

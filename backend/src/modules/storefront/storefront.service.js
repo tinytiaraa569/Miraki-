@@ -5,7 +5,7 @@ import mongoose from "mongoose"
 import { env } from "../../config/env.js"
 import { cacheGet, cacheSet } from "../../config/redis.js"
 import { getTenantModels, makeTenantDbName } from "../../config/tenantDb.js"
-import { previewCouponForCart } from "../coupons/coupon.service.js"
+import { listPublicCoupons, previewCouponForCart  } from "../coupons/coupon.service.js"
 
 // ---------------------------------------------------------------------------
 // Canvas store: plain JSON files on disk, memory-cached at first read.
@@ -699,4 +699,20 @@ export async function applyStorefrontCoupon({ code, cartTotal, userId, items, co
     cartTotal,
     items,
   })
+}
+
+
+export async function listStorefrontAvailableCoupons(countryCode) {
+  const country = /^[A-Z]{2}$/.test(countryCode || "") ? countryCode : null
+  const { substore } = await resolveSubstore(country)
+  const dbName = await ensureStorefrontTenant()
+  const sellerId = await getStorefrontSellerId()
+
+  const coupons = await listPublicCoupons({
+    tenantDbName: dbName,
+    sellerId,
+    substoreId: substore?._id,
+  })
+
+  return { coupons }
 }

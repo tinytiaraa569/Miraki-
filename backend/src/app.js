@@ -30,6 +30,7 @@ import { storeAdminRoutes } from "./modules/storeadmins/storeadmin.routes.js"
 import { storeAdminAuthRoutes } from "./modules/storeadmins/storeadmin.auth.routes.js"
 import { couponRoutes } from "./modules/coupons/coupon.routes.js"
 import { themeRoutes } from "./modules/theme/theme.routes.js"
+import { businessmodeRoutes } from "./modules/businessmode/businessmode.routes.js"
 import { UPLOADS_ROOT } from "./utils/uploads.js"
 
 export const app = express()
@@ -167,6 +168,7 @@ app.use("/api/seller/store-admins/auth", storeAdminAuthRoutes)
 // /api/seller/general-settings resolves here first.
 app.use("/api/seller/general-settings", generalSettingsRoutes)
 app.use("/api/seller/coupons", couponRoutes)
+app.use("/api/seller/business-mode",businessmodeRoutes)
 app.use("/api/seller", sellerRoutes)
 
 // Deny by default — unknown API routes 404 with no info leak.

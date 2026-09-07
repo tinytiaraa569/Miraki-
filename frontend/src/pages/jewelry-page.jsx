@@ -5,7 +5,6 @@ import "@fontsource-variable/cormorant-garamond"
 import { SECTION_REGISTRY } from "@/components/storefront/sections"
 import { StorefrontProvider, useStorefront } from "@/components/storefront/storefront-context"
 import { useStorefrontProducts } from "@/hooks/use-storefront-products"
-import { CartProvider } from "@/components/storefront/cart-context"
 import { CartDrawer } from "@/components/storefront/cart-drawer"
 /* ---------------------------------------------------------------------------
    Jewelry page (/jewelry). Mirrors the first section of
@@ -16,7 +15,7 @@ import { CartDrawer } from "@/components/storefront/cart-drawer"
 --------------------------------------------------------------------------- */
 
 function JewelryContent() {
-  const { canvas, substore } = useStorefront()
+  const { canvas, substore , locale } = useStorefront()
   const { products: liveProducts, isLoading: productsLoading } = useStorefrontProducts()
 
 
@@ -38,14 +37,14 @@ function JewelryContent() {
 
   return (
     <div className="min-h-screen bg-sf-bg text-sf-ink" dir={substore?.rtl ? "rtl" : "ltr"}>
-      <Header {...headerProps} />
+      <Header {...headerProps} locale={locale} />
       <Banner
         headline="Luxury With Legacy"
         image="https://www.mirakijewels.com/s/64e6f45eeac997e94ec94eb1/6811df962cd3422636e78512/miraki6350-banner.jpg"
         imageAlt="Model in a burgundy silk blouse wearing gold and diamond bracelets against a soft grey backdrop"
       />
       <CollectionShowcase />
-       <JewelryCollection tabs={carouselProps?.tabs ?? []} products={gridProducts} loading={productsLoading} />
+       <JewelryCollection tabs={carouselProps?.tabs ?? []} products={gridProducts} loading={productsLoading} locale={locale} />
 
     </div>
   )
@@ -54,13 +53,11 @@ function JewelryContent() {
 export default function JewelryPage() {
   return (
     <StorefrontProvider>
-      <CartProvider>
 
       <main>
         <JewelryContent />
       </main>
       <CartDrawer/>
-      </CartProvider>
     </StorefrontProvider>
   )
 }
