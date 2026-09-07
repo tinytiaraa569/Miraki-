@@ -2,7 +2,8 @@ import jwt from "jsonwebtoken"
 import QRCode from "qrcode"
 import { randomUUID } from "node:crypto"
 import { authenticator } from "../../utils/totp.js"
-import { jwtKeys } from "../../config/keys.js"
+import { env } from "../../config/env.js"
+import { jwtKeys, getVerifyKey } from "../../config/keys.js"
 import { PlatformUser } from "../../models/platformUser.model.js"
 import { ApiError } from "../../utils/apiError.js"
 
@@ -23,12 +24,23 @@ export function signPreauthToken({ userId, mode }) {
   return jwt.sign(
     { userId: String(userId), purpose: "2fa-preauth", mode, jti: randomUUID() },
     jwtKeys.privateKey,
-    { algorithm: "RS256", expiresIn: PREAUTH_TTL },
+    {
+      algorithm: "RS256",
+      expiresIn: PREAUTH_TTL,
+      keyid: jwtKeys.kid,
+      issuer: env.JWT_ISSUER,
+      audience: env.JWT_PREAUTH_AUDIENCE,
+    },
   )
 }
 
 export function verifyPreauthToken(token) {
-  const payload = jwt.verify(token, jwtKeys.publicKey, { algorithms: ["RS256"] })
+  const kid = jwt.decode(token, { complete: true })?.header?.kid
+  const payload = jwt.verify(token, getVerifyKey(kid), {
+    algorithms: ["RS256"],
+    issuer: env.JWT_ISSUER,
+    audience: env.JWT_PREAUTH_AUDIENCE,
+  })
   if (payload.purpose !== "2fa-preauth") throw new ApiError(401, "Invalid pre-auth token")
   return payload
 }

@@ -5,8 +5,7 @@ import { hashPassword, sha256 } from "../../utils/crypto.js"
 import { audit } from "../audit/audit.service.js"
 import { Seller } from "../sellers/seller.model.js"
 
-// Every failure path returns the SAME generic error so an attacker cannot
-// distinguish "token never existed" from "expired" from "already used".
+
 const INVALID = () => new ApiError(410, "This activation link is invalid or has expired")
 
 // TENANT RESOLUTION: token (master) -> token.sellerId -> Seller registry row

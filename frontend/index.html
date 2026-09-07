@@ -4,8 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0a0c10" />
-    <title>Platform Console — Superadmin</title>
-    <meta name="description" content="Multi-tenant seller platform administration console" />
+    <!-- Storefront <head> (title, description, favicon, OG) is injected here from
+         the store-wide General Settings singleton: in dev by the Vite
+         `storefront-head` plugin, in prod by the backend serveStorefront
+         middleware. Both replace this marker, so it never reaches the browser. -->
+    <!--SF_HEAD-->
     <script>
       // Apply the saved theme before first paint to avoid a flash of the wrong theme.
       ;(function () {

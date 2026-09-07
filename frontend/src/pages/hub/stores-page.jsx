@@ -3,12 +3,12 @@
 import useSWR from "swr"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StoresPanel } from "@/components/hub/stores-panel"
-import { useSellerAuth } from "@/hooks/use-seller-auth"
+import { useHubAuth } from "@/hooks/use-hub-auth"
 import { fetcher } from "@/lib/api"
 
 /** /hub/stores — main store + substores management. */
 export function HubStoresPage() {
-  const { isOwner } = useSellerAuth()
+  const { isOwner } = useHubAuth()
   const { data: hub, isLoading } = useSWR("/seller/hub", fetcher, { revalidateOnFocus: false })
 
   if (isLoading || !hub) {

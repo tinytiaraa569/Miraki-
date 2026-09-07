@@ -4,6 +4,8 @@ import { useEffect } from "react"
 import "@fontsource-variable/cormorant-garamond"
 import { SECTION_REGISTRY } from "@/components/storefront/sections"
 import { StorefrontProvider, useStorefront } from "@/components/storefront/storefront-context"
+import { CartProvider } from "@/components/storefront/cart-context"
+import { CartDrawer } from "@/components/storefront/cart-drawer"
 
 /** Lightweight skeleton shown only on the very first cold load. */
 function StorefrontSkeleton() {
@@ -26,7 +28,7 @@ function StorefrontSkeleton() {
 }
 
 function CanvasRenderer() {
-  const { canvas, substore, isLoading, error } = useStorefront()
+  const { canvas, substore, isLoading, error ,locale} = useStorefront()
 
   // Per-substore document title (e.g. "Miraki Jewels — Oman").
   useEffect(() => {
@@ -49,7 +51,7 @@ function CanvasRenderer() {
       {canvas.sections.map((section, i) => {
         const Component = SECTION_REGISTRY[section.type]
         if (!Component) return null
-        return <Component key={`${section.type}-${i}`} {...section.props} />
+        return <Component key={`${section.type}-${i}`} {...section.props} locale={locale} />
       })}
     </div>
   )
@@ -58,9 +60,13 @@ function CanvasRenderer() {
 export default function StorefrontPage() {
   return (
     <StorefrontProvider>
+      <CartProvider>
+
       <main>
         <CanvasRenderer />
       </main>
+         <CartDrawer/>
+      </CartProvider>
     </StorefrontProvider>
   )
 }

@@ -93,6 +93,7 @@ export async function getStoreVariant({ seller, tenantDbName, id }) {
 // action.substoreId (when set) must resolve to a substore under the
 // tenant's MAIN store — cross-tenant references are structurally impossible
 // (separate DBs), but a stale/foreign id would still break the resolver.
+
 async function resolveAction(Substore, seller, action = {}) {
   const resolved = { ...action }
   if (resolved.substoreId) {
