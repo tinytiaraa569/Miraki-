@@ -4252,14 +4252,14 @@ export function Header({ brand, tagline, nav = [], navRight = [], showCountrySwi
         {/* Center brand — uploaded substore logo when available, else wordmark */}
         <Link
           to="/"
-          className="flex h-14 w-[220px] shrink-0 flex-col items-center justify-center overflow-hidden text-center"
+          className="flex h-[56px] w-[220px]  flex-col items-center justify-center overflow-hidden text-center"
           aria-label={`${brand} home`}
         >
           {logoSrc ? (
             <img
               src={logoSrc || "/placeholder.svg"}
               alt={substore?.settings?.storeName || brand}
-              className="h-[14] w-[200px] object-cover object-center"
+              className="h-[56px] w-[200px] object-cover object-center"
               decoding="async"
               onError={() => setLogoFailed(true)}
             />

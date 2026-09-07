@@ -2,8 +2,8 @@ import { Router } from "express"
 import { authenticate } from "../../middleware/authenticate.js"
 import { loadUser, requirePermission } from "../../middleware/loadUser.js"
 import { validate } from "../../middleware/validate.js"
-import { create, getOne, list, update } from "./storeAdmin.controller.js"
-import { createStoreAdminSchema, listStoreAdminsQuerySchema, updateStoreAdminSchema } from "./storeAdmin.validation.js"
+import { create, getOne, list, update } from "./storeadmin.controller.js"
+import { createStoreAdminSchema, listStoreAdminsQuerySchema, updateStoreAdminSchema } from "./storeadmin.validation.js"
 
 export const storeAdminRoutes = Router()
 
