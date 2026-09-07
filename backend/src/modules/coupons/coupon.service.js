@@ -3,6 +3,9 @@ import { getTenantModels } from "../../config/tenantDb.js";
 import { ApiError } from "../../utils/apiError.js";
 import { audit } from "../audit/audit.service.js";
 
+const oid = (v) => new mongoose.Types.ObjectId(String(v));
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const SORTS = {
   code: { code: 1 },
   "-code": { code: -1 },
@@ -12,210 +15,106 @@ const SORTS = {
   "-endDate": { endDate: -1 },
 };
 
+const LIST_PROJECT = {
+  code: 1,
+  name: 1,
+  enabled: 1,
+  isPrivate: 1,
+  discountType: 1,
+  amount: 1,
+  startDate: 1,
+  endDate: 1,
+  maxUsage: 1,
+  maxUsagePerUser: 1,
+  currentUsage: 1,
+  isDeleted: 1,
+  deletedAt: 1,
+  createdAt: 1,
+  updatedAt: 1,
+};
 
 export async function listCoupons({ seller, tenantDbName, query }) {
   const { Coupon } = getTenantModels(tenantDbName);
 
-  const page = parseInt(query.page) || 1;
-  const limit = parseInt(query.limit) || 10;
-  const sort = SORTS[query.sort] || SORTS.createdAt;
+  const page = query.page ?? 1;
+  const limit = query.limit ?? 10;
+  const sort = SORTS[query.sort ?? "-createdAt"];
 
   const match = {
     sellerId: seller._id,
-    isDeleted: query.deleted ? true : false,
+    deletedAt: query.deleted ? { $ne: null } : null,
   };
-  if (query.q) {
-    match.code = { $regex: query.q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
-  }
-  if (query.status) match.status = query.status;
+  if (query.q) match.code = { $regex: escapeRegex(query.q), $options: "i" };
+  if (typeof query.enabled === "boolean") match.enabled = query.enabled;
+  if (typeof query.isPrivate === "boolean") match.isPrivate = query.isPrivate;
 
   const [result] = await Coupon.aggregate([
     { $match: match },
     { $sort: sort },
     {
       $facet: {
-        rows: [
-          { $skip: (page - 1) * limit },
-          { $limit: limit },
-          {
-            $lookup: {
-              from: "substores",
-              localField: "substoreIds",
-              foreignField: "_id",
-              pipeline: [{ $project: { name: 1, alias: 1 } }],
-              as: "substores",
-            },
-          },
-          {
-            $project: {
-              code: 1,
-              discountType: 1,
-              amount: 1,
-              startDate: 1,
-              endDate: 1,
-              usageLimit: 1,
-              usageLimitPerUser: 1,
-              usageCount: 1,
-              minPurchaseAmount: 1,
-              maxDiscountAmount: 1,
-              status: 1,
-              substores: 1,
-              isDeleted: 1,
-              deletedAt: 1,
-              createdAt: 1,
-              updatedAt: 1,
-            },
-          },
-        ],
+        rows: [{ $skip: (page - 1) * limit }, { $limit: limit }, { $project: LIST_PROJECT }],
         total: [{ $count: "n" }],
       },
     },
   ]);
 
-  return {
-    rows: result?.rows ?? [],
-    total: result?.total?.[0]?.n ?? 0,
-    page,
-    limit,
-  };
-}
-
-
-
-export async function listCouponUsage({ seller, tenantDbName, id, query }) {
-  const { Coupon } = getTenantModels(tenantDbName);
-
-  const page = parseInt(query.page) || 1;
-  const limit = parseInt(query.limit) || 20;
-
-  const exists = await Coupon.exists({ _id: id, sellerId: seller._id });
-  if (!exists) throw new ApiError(404, "Coupon not found");
-
-  const escaped = query.q ? query.q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : null;
-
-  const resolveAndFilter = [
-    { $unwind: "$usageCountPerUser" },
-    {
-      $lookup: {
-        from: "customers",
-        localField: "usageCountPerUser.userId",
-        foreignField: "_id",
-        pipeline: [{ $project: { name: 1, email: 1 } }],
-        as: "customer",
-      },
-    },
-    { $unwind: { path: "$customer", preserveNullAndEmptyArrays: true } },
-    {
-      $project: {
-        _id: 0,
-        userId: "$usageCountPerUser.userId",
-        usageCount: "$usageCountPerUser.count",
-        name: "$customer.name",
-        email: "$customer.email",
-      },
-    },
-    ...(escaped
-      ? [
-          {
-            $match: {
-              $or: [
-                { name: { $regex: escaped, $options: "i" } },
-                { email: { $regex: escaped, $options: "i" } },
-              ],
-            },
-          },
-        ]
-      : []),
-  ];
-
-  const [result] = await Coupon.aggregate([
-    { $match: { _id: new mongoose.Types.ObjectId(id), sellerId: seller._id } },
-    { $project: { usageCount: 1, usageCountPerUser: 1 } },
-    {
-      $facet: {
-       
-        summary: [
-          {
-            $project: {
-              totalRedemptions: "$usageCount",
-              uniqueUsers: { $size: { $ifNull: ["$usageCountPerUser", []] } },
-            },
-          },
-        ],
-        rows: [...resolveAndFilter, { $sort: { usageCount: -1 } }, { $skip: (page - 1) * limit }, { $limit: limit }],
-        total: [...resolveAndFilter, { $count: "n" }],
-      },
-    },
-  ]);
-
-  const summary = result?.summary?.[0] ?? {};
-
-  return {
-    rows: result?.rows ?? [],
-    total: result?.total?.[0]?.n ?? 0,
-    page,
-    limit,
-    uniqueUsers: summary.uniqueUsers ?? 0,
-    totalRedemptions: summary.totalRedemptions ?? 0,
-  };
+  return { rows: result?.rows ?? [], total: result?.total?.[0]?.n ?? 0, page, limit };
 }
 
 export async function getCoupon({ seller, tenantDbName, id }) {
   const { Coupon } = getTenantModels(tenantDbName);
-  const doc = await Coupon.findOne({ _id: id, sellerId: seller._id }).lean();
+  const doc = await Coupon.findOne({ _id: id, sellerId: seller._id, deletedAt: null }).lean();
   if (!doc) throw new ApiError(404, "Coupon not found");
   return doc;
 }
 
+export async function listCouponUsage({ seller, tenantDbName, id, query }) {
+  const { Coupon } = getTenantModels(tenantDbName);
+  const page = parseInt(query.page) || 1;
+  const limit = parseInt(query.limit) || 20;
 
-async function resolveSubstoreIds(Substore, seller, substoreIds) {
-  if (!substoreIds || substoreIds.length === 0) return [];
+  const doc = await Coupon.findOne({ _id: id, sellerId: seller._id }).select("usageByUser currentUsage").lean();
+  if (!doc) throw new ApiError(404, "Coupon not found");
 
-  const found = await Substore.find({
-    _id: { $in: substoreIds },
-    parentStoreId: seller.mainStoreId,
-  })
-    .select("_id")
-    .lean();
-
-  if (found.length !== substoreIds.length) {
-    throw new ApiError(400, "One or more linked substores were not found");
+  let rows = doc.usageByUser ?? [];
+  if (query.q) {
+    const rx = new RegExp(escapeRegex(query.q), "i");
+    rows = rows.filter((u) => rx.test(u.email ?? ""));
   }
+  const total = rows.length;
+  const paged = rows.slice((page - 1) * limit, (page - 1) * limit + limit);
 
-  return found.map((s) => new mongoose.Types.ObjectId(String(s._id)));
+  return { rows: paged, total, page, limit, currentUsage: doc.currentUsage ?? 0 };
 }
 
-function assertConsistentCouponState(merged) {
-  if (merged.endDate <= merged.startDate) {
+function assertConsistentCouponState(data) {
+  if (data.startDate && data.endDate && new Date(data.endDate) <= new Date(data.startDate)) {
     throw new ApiError(400, "endDate must be after startDate");
   }
-  if (merged.discountType === "percentage" && merged.amount > 100) {
+  if (data.discountType === "percentage" && data.amount > 100) {
     throw new ApiError(400, "Percentage discount cannot exceed 100");
   }
-  if (merged.maxDiscountAmount != null && merged.discountType !== "percentage") {
-    throw new ApiError(400, "maxDiscountAmount is only applicable to percentage discount coupons");
+  if (data.maxDiscount != null && data.discountType !== "percentage") {
+    throw new ApiError(400, "maxDiscount is only applicable to percentage discount coupons");
   }
 }
 
 export async function createCouponDoc({ seller, tenantDbName, user, body, req }) {
-  const { Coupon, Substore } = getTenantModels(tenantDbName);
-
-  const substoreIds = await resolveSubstoreIds(Substore, seller, body.substoreIds);
+  const { Coupon } = getTenantModels(tenantDbName);
   assertConsistentCouponState(body);
 
   let doc;
   try {
     doc = await Coupon.create({
       ...body,
-      substoreIds,
+      mainStoreId: body.mainStoreId ?? seller.mainStoreId,
       sellerId: seller._id,
       createdBy: user._id,
       updatedBy: user._id,
     });
   } catch (err) {
-    if (err?.code === 11000) {
-      throw new ApiError(409, "A coupon with this code already exists for this seller");
-    }
+    if (err?.code === 11000) throw new ApiError(409, "A coupon with this code already exists for this seller");
     throw err;
   }
 
@@ -227,43 +126,34 @@ export async function createCouponDoc({ seller, tenantDbName, user, body, req })
     action: "seller.coupon.created",
     targetType: "Coupon",
     targetId: doc._id,
-    after: { code: doc.code, status: doc.status },
+    after: { code: doc.code, enabled: doc.enabled },
   });
 
   return doc.toObject();
 }
 
 export async function updateCouponDoc({ seller, tenantDbName, user, id, body, req }) {
-  const { Coupon, Substore } = getTenantModels(tenantDbName);
-
+  const { Coupon } = getTenantModels(tenantDbName);
   const doc = await Coupon.findOne({ _id: id, sellerId: seller._id });
   if (!doc) throw new ApiError(404, "Coupon not found");
 
-  const before = { code: doc.code, status: doc.status };
+  const before = { code: doc.code, enabled: doc.enabled };
 
-  const { substoreIds, ...rest } = body;
-
-  if (substoreIds) {
-    doc.substoreIds = await resolveSubstoreIds(Substore, seller, substoreIds);
-  }
-  for (const [key, value] of Object.entries(rest)) doc[key] = value;
+  for (const [key, value] of Object.entries(body)) doc[key] = value;
   doc.updatedBy = user._id;
 
- 
   assertConsistentCouponState({
     startDate: doc.startDate,
     endDate: doc.endDate,
     discountType: doc.discountType,
     amount: doc.amount,
-    maxDiscountAmount: doc.maxDiscountAmount,
+    maxDiscount: doc.maxDiscount,
   });
 
   try {
     await doc.save();
   } catch (err) {
-    if (err?.code === 11000) {
-      throw new ApiError(409, "A coupon with this code already exists for this seller");
-    }
+    if (err?.code === 11000) throw new ApiError(409, "A coupon with this code already exists for this seller");
     throw err;
   }
 
@@ -276,17 +166,82 @@ export async function updateCouponDoc({ seller, tenantDbName, user, id, body, re
     targetType: "Coupon",
     targetId: doc._id,
     before,
-    after: { code: doc.code, status: doc.status },
+    after: { code: doc.code, enabled: doc.enabled },
   });
 
   return doc.toObject();
 }
 
+export async function toggleCouponDoc({ seller, tenantDbName, user, id, req }) {
+  const { Coupon } = getTenantModels(tenantDbName);
+  const doc = await Coupon.findOne({ _id: id, sellerId: seller._id, deletedAt: null });
+  if (!doc) throw new ApiError(404, "Coupon not found");
+
+  doc.enabled = !doc.enabled;
+  doc.updatedBy = user._id;
+  await doc.save();
+
+  await audit({
+    req,
+    actorId: user._id,
+    actorRole: user.role,
+    sellerId: seller._id,
+    action: "seller.coupon.toggled",
+    targetType: "Coupon",
+    targetId: doc._id,
+    after: { enabled: doc.enabled },
+  });
+
+  return { ok: true, id: doc._id, enabled: doc.enabled };
+}
+
+export async function duplicateCouponDoc({ seller, tenantDbName, user, id, req }) {
+  const { Coupon } = getTenantModels(tenantDbName);
+  const original = await Coupon.findOne({ _id: id, sellerId: seller._id }).lean();
+  if (!original) throw new ApiError(404, "Coupon not found");
+
+  const { _id, createdAt, updatedAt, currentUsage, usageByUser, ...rest } = original;
+
+  let copy;
+  let suffix = 1;
+  while (!copy) {
+    const code = `${rest.code}-COPY${suffix > 1 ? suffix : ""}`;
+    try {
+      copy = await Coupon.create({
+        ...rest,
+        code,
+        currentUsage: 0,
+        usageByUser: [],
+        createdBy: user._id,
+        updatedBy: user._id,
+      });
+    } catch (err) {
+      if (err?.code === 11000 && suffix < 20) {
+        suffix += 1;
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  await audit({
+    req,
+    actorId: user._id,
+    actorRole: user.role,
+    sellerId: seller._id,
+    action: "seller.coupon.duplicated",
+    targetType: "Coupon",
+    targetId: copy._id,
+    after: { code: copy.code, sourceId: id },
+  });
+
+  return copy.toObject();
+}
+
 // SOFT DELETE
 export async function deleteCouponDoc({ seller, tenantDbName, user, id, req }) {
   const { Coupon } = getTenantModels(tenantDbName);
-
-  const doc = await Coupon.findOne({ _id: id, sellerId: seller._id, isDeleted: false });
+  const doc = await Coupon.findOne({ _id: id, sellerId: seller._id, deletedAt: null });
   if (!doc) throw new ApiError(404, "Coupon not found");
 
   doc.isDeleted = true;
@@ -310,11 +265,33 @@ export async function deleteCouponDoc({ seller, tenantDbName, user, id, req }) {
   return { ok: true, id: doc._id, isDeleted: true };
 }
 
+export async function bulkDeleteCouponDoc({ seller, tenantDbName, user, ids, req }) {
+  const { Coupon } = getTenantModels(tenantDbName);
+  const objectIds = ids.map((id) => oid(id));
+
+  const result = await Coupon.updateMany(
+    { _id: { $in: objectIds }, sellerId: seller._id, deletedAt: null },
+    { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: user._id, updatedBy: user._id } },
+  );
+
+  await audit({
+    req,
+    actorId: user._id,
+    actorRole: user.role,
+    sellerId: seller._id,
+    action: "seller.coupon.bulk_deleted",
+    targetType: "Coupon",
+    targetId: null,
+    after: { ids, matched: result.matchedCount, modified: result.modifiedCount },
+  });
+
+  return { success: true, message: `${result.modifiedCount} coupon(s) deleted`, deleted: result.modifiedCount };
+}
+
 // RESTORE
 export async function restoreCouponDoc({ seller, tenantDbName, user, id, req }) {
   const { Coupon } = getTenantModels(tenantDbName);
-
-  const doc = await Coupon.findOne({ _id: id, sellerId: seller._id, isDeleted: true });
+  const doc = await Coupon.findOne({ _id: id, sellerId: seller._id, deletedAt: { $ne: null } });
   if (!doc) throw new ApiError(404, "Deleted coupon not found");
 
   doc.isDeleted = false;
@@ -325,9 +302,7 @@ export async function restoreCouponDoc({ seller, tenantDbName, user, id, req }) 
   try {
     await doc.save();
   } catch (err) {
-    if (err?.code === 11000) {
-      throw new ApiError(409, "Cannot restore — another active coupon already uses this code");
-    }
+    if (err?.code === 11000) throw new ApiError(409, "Cannot restore — another active coupon already uses this code");
     throw err;
   }
 
@@ -339,7 +314,7 @@ export async function restoreCouponDoc({ seller, tenantDbName, user, id, req }) 
     action: "seller.coupon.restored",
     targetType: "Coupon",
     targetId: doc._id,
-    after: { code: doc.code, isDeleted: false },
+    after: { code: doc.code },
   });
 
   return doc.toObject();
@@ -348,8 +323,7 @@ export async function restoreCouponDoc({ seller, tenantDbName, user, id, req }) 
 // PERMANENT DESTROY
 export async function destroyCouponDoc({ seller, tenantDbName, user, id, req }) {
   const { Coupon } = getTenantModels(tenantDbName);
-
-  const doc = await Coupon.findOne({ _id: id, sellerId: seller._id, isDeleted: true });
+  const doc = await Coupon.findOne({ _id: id, sellerId: seller._id, deletedAt: { $ne: null } });
   if (!doc) throw new ApiError(404, "Deleted coupon not found — soft delete it first");
 
   await doc.deleteOne();
@@ -368,160 +342,328 @@ export async function destroyCouponDoc({ seller, tenantDbName, user, id, req }) 
   return { ok: true, id: doc._id, destroyed: true };
 }
 
-
-export async function redeemCouponDoc({ tenantDbName, id, userId, cartTotal }) {
-  const { Coupon } = getTenantModels(tenantDbName);
-
-  const coupon = await Coupon.findOne({ _id: id, isDeleted: false }).lean();
-  if (!coupon) throw new ApiError(404, "Coupon not found");
-
-  if (coupon.status !== "active") {
-    throw new ApiError(400, "This coupon is not active");
-  }
-
-  const now = new Date();
-  if (now < coupon.startDate || now > coupon.endDate) {
-    throw new ApiError(400, "This coupon is not valid at this time");
-  }
-
-  if (coupon.usageLimit !== null && coupon.usageCount >= coupon.usageLimit) {
-    throw new ApiError(400, "Coupon usage limit reached");
-  }
-
-  const userEntry = coupon.usageCountPerUser.find((u) => u.userId.toString() === userId.toString());
-  const userCount = userEntry?.count ?? 0;
-  if (coupon.usageLimitPerUser !== null && userCount >= coupon.usageLimitPerUser) {
-    throw new ApiError(400, "You've already used this coupon the maximum number of times");
-  }
-
-
-  if (coupon.minPurchaseAmount !== null) {
-    if (cartTotal === undefined) {
-      throw new ApiError(400, "cartTotal is required to redeem this coupon");
-    }
-    if (cartTotal < coupon.minPurchaseAmount) {
-      throw new ApiError(400, `A minimum purchase of ${coupon.minPurchaseAmount} is required for this coupon`);
-    }
-  }
-
-
-  const usageLimitFilter = coupon.usageLimit !== null ? { usageCount: { $lt: coupon.usageLimit } } : {};
-
-  const incremented = await Coupon.updateOne(
-    {
-      _id: id,
-      "usageCountPerUser.userId": userId,
-      ...usageLimitFilter,
-      ...(coupon.usageLimitPerUser !== null
-        ? { "usageCountPerUser.count": { $lt: coupon.usageLimitPerUser } }
-        : {}),
-    },
-    { $inc: { "usageCountPerUser.$.count": 1, usageCount: 1 } }
-  );
-
-  if (incremented.matchedCount === 1) {
-    return computeDiscount(coupon, cartTotal);
-  }
-
-  // No existing per-user entry — push a new one, still guarding usageLimit atomically.
-  const pushed = await Coupon.updateOne(
-    {
-      _id: id,
-      "usageCountPerUser.userId": { $ne: userId },
-      ...usageLimitFilter,
-    },
-    {
-      $push: { usageCountPerUser: { userId, count: 1 } },
-      $inc: { usageCount: 1 },
-    }
-  );
-
-  if (pushed.matchedCount === 0) {
-    // Lost the race, or limit was hit between our read and write.
-    throw new ApiError(409, "Coupon could not be redeemed — usage limit may have just been reached");
-  }
-
-  return computeDiscount(coupon, cartTotal);
+const ENTITY_CONFIG = {
+  product: { model: "Product", project: { _id: 1, name: 1, alias: 1, sku: 1, images: 1 }, search: ["name", "alias", "sku"] },
+  category: { model: "Category", project: { _id: 1, name: 1, alias: 1 }, search: ["name", "alias"] },
+  collection: { model: "Collection", project: { _id: 1, name: 1, alias: 1 }, search: ["name", "alias"] },
+  brand: { model: "Brand", project: { _id: 1, name: 1, alias: 1 }, search: ["name", "alias"] },
+  substores: { model: "Substore", project: { _id: 1, name: 1, alias: 1 }, search: ["name", "alias"] },
 }
 
+export async function listEntityOptions({ seller, tenantDbName, entity, query }) {
+  const cfg = ENTITY_CONFIG[entity];
+  if (!cfg) throw new ApiError(404, "Unknown option type");
 
+  const Model = getTenantModels(tenantDbName)[cfg.model];
+  if (!Model) throw new ApiError(404, "Unknown option type");
+  const parentStoreId = oid(seller.mainStoreId);
 
-export function computeDiscount(coupon, cartTotal) {
+  if (query.ids?.length) {
+    const rows = await Model.aggregate([
+      { $match: { parentStoreId, _id: { $in: query.ids.map((id) => oid(id)) } } },
+      { $sort: { name: 1 } },
+      { $project: cfg.project },
+    ]);
+    return { rows, total: rows.length, page: 1, limit: rows.length };
+  }
+
+  const page = query.page ?? 1;
+  const limit = query.limit ?? 10;
+  const match = { parentStoreId, deletedAt: null };
+  if (query.q) {
+    const rx = { $regex: escapeRegex(query.q), $options: "i" };
+    match.$or = cfg.search.map((f) => ({ [f]: rx }));
+  }
+
+  const [result] = await Model.aggregate([
+    { $match: match },
+    {
+      $facet: {
+        rows: [{ $sort: { name: 1 } }, { $skip: (page - 1) * limit }, { $limit: limit }, { $project: cfg.project }],
+        total: [{ $count: "n" }],
+      },
+    },
+  ]);
+
+  return { rows: result?.rows ?? [], total: result?.total?.[0]?.n ?? 0, page, limit };
+}
+
+function itemMatchesIds(item, type, idSet) {
+  const ids =
+    type === "product"
+      ? item.productId ? [item.productId] : []
+      : type === "category"
+        ? item.categoryIds
+        : type === "collection"
+          ? item.collectionIds
+          : item.brandId
+            ? [item.brandId]
+            : [];
+  return (ids || []).some((id) => idSet.has(String(id)));
+}
+
+function compareNumber(actual, operator, expected) {
+  switch (operator) {
+    case "equals":
+      return actual === expected;
+    case "greaterThan":
+      return actual > expected;
+    case "lessThan":
+      return actual < expected;
+    default:
+      return false;
+  }
+}
+
+// function evaluateCondition(cond, { cartTotal, items }) {
+//   if (cond.field === "cart_total") {
+//     return compareNumber(cartTotal ?? 0, cond.operator, Number(cond.values[0]?.name));
+//   }
+//   if (cond.field === "cart_item_count" || cond.field === "product_quantity") {
+//     const count = (items || []).reduce((sum, it) => sum + (it.quantity ?? 1), 0);
+//     return compareNumber(count, cond.operator, Number(cond.values[0]?.name));
+//   }
+//   const idSet = new Set(cond.values.map((v) => String(v.id)));
+//   const hasMatch = (items || []).some((item) => itemMatchesIds(item, cond.field, idSet));
+//   if (cond.operator === "notContains" || cond.operator === "notEquals") return !hasMatch;
+//   return hasMatch; // contains / equals
+// }
+
+function evaluateCondition(cond, { cartTotal, items }) {
+  if (cond.field === "cart_total") {
+    return compareNumber(cartTotal ?? 0, cond.operator, Number(cond.values[0]?.name));
+  }
+  if (cond.field === "cart_item_count") {
+    const count = (items || []).reduce((sum, it) => sum + (it.quantity ?? 1), 0);
+    return compareNumber(count, cond.operator, Number(cond.values[0]?.name));
+  }
+  // if (cond.field === "product_quantity") {
+  //   return (cond.values || []).every((v) => {
+  //     const productQty = (items || [])
+  //       .filter((item) => String(item.productId) === String(v.id))
+  //       .reduce((sum, it) => sum + (it.quantity ?? 1), 0);
+  //     return compareNumber(productQty, cond.operator, Number(v.name));
+  //   });
+  // }
+  if (cond.field === "product_quantity") {
+  const threshold = Number(cond.values[0]?.name);
+  return (items || []).some((it) => compareNumber(it.quantity ?? 1, cond.operator, threshold));
+}
+  const idSet = new Set(cond.values.map((v) => String(v.id)));
+  const hasMatch = (items || []).some((item) => itemMatchesIds(item, cond.field, idSet));
+  if (cond.operator === "notContains" || cond.operator === "notEquals") return !hasMatch;
+  return hasMatch;
+}
+
+function isItemScopedField(field) {
+  return ["product", "category", "collection", "brand", "product_quantity"].includes(field);
+}
+
+function getMatchingItems(cond, items) {
+  if (cond.field === "product_quantity") {
+    const threshold = Number(cond.values[0]?.name);
+    return (items || []).filter((item) => compareNumber(item.quantity ?? 1, cond.operator, threshold));
+  }
+  const idSet = new Set(cond.values.map((v) => String(v.id)));
+  const matches = (items || []).filter((item) => itemMatchesIds(item, cond.field, idSet));
+  if (cond.operator === "notContains" || cond.operator === "notEquals") {
+    const matchedIds = new Set(matches.map((i) => i.productId));
+    return (items || []).filter((item) => !matchedIds.has(item.productId));
+  }
+  return matches;
+}
+
+function getEligibleItems(conditions, items) {
+  const itemConditions = (conditions || []).filter((c) => isItemScopedField(c.field));
+  if (itemConditions.length === 0) {
+    return { eligibleItems: items || [], hasItemScope: false };
+  }
+  let eligible = items || [];
+  for (const cond of itemConditions) {
+    const matchedIds = new Set(getMatchingItems(cond, items).map((i) => i.productId));
+    eligible = eligible.filter((item) => matchedIds.has(item.productId));
+  }
+  return { eligibleItems: eligible, hasItemScope: true };
+}
+
+function computeDiscount(coupon, applicableSubtotal) {
   let discount =
     coupon.discountType === "percentage"
-      ? ((cartTotal ?? 0) * coupon.amount) / 100
+      ? (applicableSubtotal * coupon.amount) / 100
       : coupon.amount;
-
-  if (coupon.maxDiscountAmount !== null) {
-    discount = Math.min(discount, coupon.maxDiscountAmount);
-  }
-  return { discountAmount: discount, coupon: { code: coupon.code, discountType: coupon.discountType } };
+  if (coupon.maxDiscount != null) discount = Math.min(discount, coupon.maxDiscount);
+  discount = Math.min(discount, applicableSubtotal ?? 0);
+  return discount;
 }
 
-
-function assertConditionsMet(conditions, items) {
-  for (const cond of conditions || []) {
-    if (!cond.valueIds?.length) continue
-    const idSet = new Set(cond.valueIds.map(String))
-    const hasMatch = (items || []).some((item) => {
-      const ids =
-        cond.type === "category" ? item.categoryIds
-        : cond.type === "collection" ? item.collectionIds
-        : item.brandId ? [item.brandId] : []
-      return (ids || []).some((id) => idSet.has(String(id)))
-    })
-    if (cond.operator === "not_equal" ? hasMatch : !hasMatch) {
-      throw new ApiError(400, "Your cart doesn't have items eligible for this coupon")
-    }
-  }
-}
-
-export async function previewCouponForCart({ tenantDbName, code,sellerId, substoreId, userId, cartTotal, items }) {
+export async function previewCouponForCart({ sellerId, tenantDbName, code, substoreId, userId, cartTotal, items }) {
   const { Coupon } = getTenantModels(tenantDbName);
 
   const coupon = await Coupon.findOne({
     code: String(code || "").trim().toUpperCase(),
-    sellerId,
-    isDeleted: false,
+    sellerId: sellerId,
+    deletedAt: null,
   }).lean();
-  
   if (!coupon) throw new ApiError(404, "Invalid coupon code");
 
-  if (coupon.status !== "active") {
-    throw new ApiError(400, "This coupon is not active");
-  }
+  if (!coupon.enabled) throw new ApiError(400, "This coupon is not active");
 
   const now = new Date();
-  if (now < coupon.startDate || now > coupon.endDate) {
-    throw new ApiError(400, "This coupon is not valid at this time");
+  if (coupon.startDate && now < coupon.startDate) throw new ApiError(400, "This coupon is not valid yet");
+  if (coupon.endDate && now > coupon.endDate) throw new ApiError(400, "This coupon has expired");
+
+  if (substoreId !== undefined && coupon.substoreIds?.length) {
+    if (!coupon.substoreIds.map(String).includes(String(substoreId))) {
+      throw new ApiError(400, "This coupon is not valid for this store");
+    }
   }
 
-  if (coupon.substoreIds?.length && (!substoreId || !coupon.substoreIds.map(String).includes(String(substoreId)))) {
-    throw new ApiError(400, "This coupon is not valid for this store");
+  if (coupon.minOrderAmount != null && (cartTotal ?? 0) < coupon.minOrderAmount) {
+    throw new ApiError(
+      400,
+      `A minimum order amount of ${coupon.minOrderAmount} is required to use this coupon`,
+    );
   }
 
-  assertConditionsMet(coupon.conditions, items);
-
-  if (coupon.usageLimit !== null && coupon.usageCount >= coupon.usageLimit) {
+  if (coupon.maxUsage != null && coupon.currentUsage >= coupon.maxUsage) {
     throw new ApiError(400, "Coupon usage limit reached");
   }
 
-  if (userId && coupon.usageLimitPerUser !== null) {
-    const entry = coupon.usageCountPerUser.find((u) => u.userId.toString() === String(userId));
-    const count = entry?.count ?? 0;
-    if (count >= coupon.usageLimitPerUser) {
+  if (userId && coupon.maxUsagePerUser != null) {
+    const entry = coupon.usageByUser.find((u) => String(u.userId) === String(userId));
+    if ((entry?.count ?? 0) >= coupon.maxUsagePerUser) {
       throw new ApiError(400, "You've already used this coupon the maximum number of times");
     }
   }
 
-  if (coupon.minPurchaseAmount !== null) {
-    if (cartTotal === undefined) {
-      throw new ApiError(400, "cartTotal is required to apply this coupon");
+  const cartLevelConditions = (coupon.conditions || []).filter(
+    (c) => c.field === "cart_total" || c.field === "cart_item_count" || c.field === "product_quantity",
+  );
+  const cartGatesOk = cartLevelConditions.every((cond) => evaluateCondition(cond, { cartTotal, items }));
+  if (!cartGatesOk) {
+    throw new ApiError(400, "Your cart doesn't meet the conditions for this coupon");
+  }
+
+  const { eligibleItems, hasItemScope } = getEligibleItems(coupon.conditions, items);
+  if (hasItemScope && eligibleItems.length === 0) {
+    throw new ApiError(400, "No items in your cart qualify for this coupon");
+  }
+
+  const applicableSubtotal = hasItemScope
+    ? eligibleItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
+    : (cartTotal ?? 0);
+
+  const discountAmount = computeDiscount(coupon, applicableSubtotal);
+
+  return {
+    discountAmount,
+    coupon: { code: coupon.code, discountType: coupon.discountType },
+    applicableInfo: {
+      allItemsEligible: !hasItemScope || eligibleItems.length === (items || []).length,
+      eligibleItemsCount: eligibleItems.length,
+      totalItemsCount: (items || []).length,
+      applicableSubtotal,
+      eligibleProductIds: eligibleItems.map((i) => i.productId),
+    },
+  };
+}
+
+export async function redeemCouponDoc({ seller, tenantDbName, body }) {
+  const { Coupon } = getTenantModels(tenantDbName);
+  const { code, userId, cartTotal, items, substoreId } = body;
+
+const result = await previewCouponForCart({ sellerId: seller._id, tenantDbName, code, substoreId, userId, cartTotal, items });
+  const coupon = await Coupon.findOne({
+    code: String(code).trim().toUpperCase(),
+    sellerId: seller._id,
+    deletedAt: null,
+  }).lean();
+
+  const usageLimitFilter = coupon.maxUsage != null ? { currentUsage: { $lt: coupon.maxUsage } } : {};
+  if (userId) {
+    const incremented = await Coupon.updateOne(
+      {
+        _id: coupon._id,
+        "usageByUser.userId": oid(userId),
+        ...usageLimitFilter,
+        ...(coupon.maxUsagePerUser != null ? { "usageByUser.count": { $lt: coupon.maxUsagePerUser } } : {}),
+      },
+      { $inc: { "usageByUser.$.count": 1, currentUsage: 1 } },
+    );
+    if (incremented.matchedCount === 0) {
+      const pushed = await Coupon.updateOne(
+        { _id: coupon._id, "usageByUser.userId": { $ne: oid(userId) }, ...usageLimitFilter },
+        { $push: { usageByUser: { userId: oid(userId), count: 1 } }, $inc: { currentUsage: 1 } },
+      );
+      if (pushed.matchedCount === 0) {
+        throw new ApiError(409, "Coupon could not be applied — usage limit may have just been reached");
+      }
     }
-    if (cartTotal < coupon.minPurchaseAmount) {
-      throw new ApiError(400, `A minimum purchase of ${coupon.minPurchaseAmount} is required for this coupon`);
+  } else {
+    const inc = await Coupon.updateOne({ _id: coupon._id, ...usageLimitFilter }, { $inc: { currentUsage: 1 } });
+    if (inc.matchedCount === 0) {
+      throw new ApiError(409, "Coupon could not be applied — usage limit may have just been reached");
     }
   }
 
-  return computeDiscount(coupon, cartTotal);
+  return result;
+}
+
+
+
+function formatDiscountLabel(coupon) {
+  if (coupon.discountType === "percentage") {
+    return coupon.maxDiscount != null
+      ? `${coupon.amount}% off (up to ${coupon.maxDiscount})`
+      : `${coupon.amount}% off`;
+  }
+  return `${coupon.amount} off`;
+}
+
+export async function listPublicCoupons({ tenantDbName, sellerId, substoreId }) {
+  const { Coupon } = getTenantModels(tenantDbName);
+  const now = new Date();
+
+  const match = {
+    sellerId,
+    deletedAt: null,
+    enabled: true,
+    isPrivate: { $ne: true },
+    $and: [
+      { $or: [{ startDate: null }, { startDate: { $exists: false } }, { startDate: { $lte: now } }] },
+      { $or: [{ endDate: null }, { endDate: { $exists: false } }, { endDate: { $gte: now } }] },
+    ],
+  };
+  if (substoreId) {
+    match.$or = [{ substoreIds: { $size: 0 } }, { substoreIds: { $exists: false } }, { substoreIds: substoreId }];
+  }
+
+  const docs = await Coupon.find(match)
+    .select({
+      code: 1,
+      name: 1,
+      description: 1,
+      discountType: 1,
+      amount: 1,
+      maxDiscount: 1,
+      minOrderAmount: 1,
+      maxUsage: 1,
+      currentUsage: 1,
+      conditions: 1,
+      endDate: 1,
+    })
+    .sort({ createdAt: -1 })
+    .limit(20)
+    .lean();
+
+  return docs
+    .filter((c) => c.maxUsage == null || c.currentUsage < c.maxUsage)
+    .map((c) => ({
+      code: c.code,
+      description: c.description || c.name || null,
+      displayDiscount: formatDiscountLabel(c),
+      minOrderHint: c.minOrderAmount ? `Min order ${c.minOrderAmount}` : null,
+      hasConditions: (c.conditions || []).length > 0,
+      endDate: c.endDate || null,
+    }));
 }

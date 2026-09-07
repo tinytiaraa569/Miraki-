@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useCallback, useContext, useMemo } from "react"
+import { createContext, useCallback,useState,useEffect, useContext, useMemo } from "react"
 import useSWR from "swr"
 import { fetcher } from "@/lib/api"
 import { UnderConstruction } from "./under-construction"
@@ -53,6 +53,17 @@ export function StorefrontProvider({ children }) {
   })
   const gate = site?.underConstruction
 
+  const [locale, setLocale] = useState(null)
+
+  useEffect(() => {
+    if (substore?.language) setLocale(substore.language)
+  }, [substore?.language])
+
+  const availableLocales = useMemo(() => {
+    if (!substore) return ["en"]
+    return Array.from(new Set([substore.language, ...(substore.supportedLanguages || [])].filter(Boolean)))
+  }, [substore])
+// console.log("availableLocales", availableLocales)
   // One shared formatter per substore — Intl construction is not free.
   const priceFormatter = useMemo(() => {
     if (!substore?.currency) return null
@@ -100,8 +111,11 @@ export function StorefrontProvider({ children }) {
       error: error ?? null,
       formatPrice,
       switchCountry,
+      locale: locale ?? substore?.language ?? "en",
+      setLocale, 
+      availableLocales,
     }),
-    [data, substore, substores, isLoading, error, formatPrice, switchCountry],
+    [data, substore, substores, isLoading, error, formatPrice, switchCountry, locale, availableLocales],
   )
 
   // All hooks run above; only now may we short-circuit. An enabled gate replaces

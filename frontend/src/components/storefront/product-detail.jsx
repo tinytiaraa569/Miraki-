@@ -5,7 +5,8 @@ import { ChevronDown, ChevronLeft, ChevronRight, Heart, Check, Loader2, Minus, P
 import { SECTION_REGISTRY } from "@/components/storefront/sections"
 import { ImageZoomLightbox } from "@/components/storefront/image-zoom-lightbox"
 import { useStorefront } from "@/components/storefront/storefront-context"
-import { useCart } from "@/components/storefront/cart-context"
+import { useCart } from "@/hooks/cart/use-cart"
+import { useWishlist } from "@/hooks/wishlist/use-wishlist"
 import { useStorefrontVariantMedia } from "@/hooks/use-storefront-products"
 import { isValueBearing } from "@/components/hub/option-sets/option-set-utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -202,12 +203,13 @@ function OptionAccordion({ option, selectedValue, onSelect }) {
 
 export function ProductDetail({ product }) {
   const { formatPrice } = useStorefront()
-  const { addItem, addingItem } = useCart()
+  const { addItem } = useCart()
+  const { toggle, isInWishlist } = useWishlist()
+  const wished = isInWishlist(product._id || product.id)
   const [tab, setTab] = useState("customization")
   const [activeImg, setActiveImg] = useState(0)
   const [zoomOpen, setZoomOpen] = useState(false)
   const [zoomIndex, setZoomIndex] = useState(0)
-  const [wished, setWished] = useState(false)
   const [budget, setBudget] = useState("")
   const [charity, setCharity] = useState("tree")
   const [quantity, setQuantity] = useState(1)
@@ -334,34 +336,24 @@ export function ProductDetail({ product }) {
   const crumbs = ["Home", "Jewelry", product.tag || "Collection"].filter(Boolean)
 
   async function handleAddToCart() {
-      // if (!variantResolved) {
-      //   setAddError("Please select an option for every choice above")
-      //   return
-      // }
-    setAddError("")
-    setJustAdded(false)
-    try {
-      await addItem({
-        product, 
-        variant: matchedVariant,
-        options: options.map((opt) => {
-          const val = (opt.values || []).find((v) => v.value === selected[opt.name])
-          return {
-            name: opt.name,
-            label: opt.displayName || opt.name,
-            value: selected[opt.name] ?? "",
-            valueLabel: val?.label ?? selected[opt.name] ?? "",
-          }
-        }),
-        quantity,
-        price: total,
-        alias: product.alias,
-      })
-      setJustAdded(true)
-    } catch (err) {
-      setAddError(err.message || "Couldn't add this to your cart — please try again")
+  setAddError("")
+  setJustAdded(false)
+
+  const selectedOptions = options.map((opt) => {
+    const val = (opt.values || []).find((v) => v.value === selected[opt.name])
+    console.log(opt,"options")
+    return {
+      name: opt.name,
+      label: opt.displayName || opt.name,
+      type:opt.type,
+      value: selected[opt.name] ?? "",
+      valueLabel: val?.label ?? selected[opt.name] ?? "",
     }
-  }
+  })
+
+  addItem(product, matchedVariant, quantity, selectedOptions, product.tag)
+  setJustAdded(true)
+}
   return (
     <div className="mx-auto max-w-[100rem] px-4 pb-20 pt-8 lg:px-10">
       {/* Breadcrumb */}
@@ -574,27 +566,23 @@ export function ProductDetail({ product }) {
                 <button
                   type="button"
                   onClick={handleAddToCart}
-                  disabled={addingItem}
                   className="cursor-pointer flex-1 bg-sf-blush px-8 py-4 text-center text-md font-semibold tracking-widest text-black transition-opacity hover:opacity-90 disabled:opacity-60"
                   >
-                  {addingItem ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                      Adding…
-                    </span>
-                  ) : (
+                  
                     "Purchase with Purpose"
-                  )}
+                  
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setWished((v) => !v)}
-                  aria-label={wished ? "Remove from wishlist" : "Add to wishlist"}
-                  aria-pressed={wished}
-                   className="cursor-pointer grid w-16 place-items-center bg-sf-blush text-black transition-opacity hover:opacity-90"
-                >
-                  <Heart className={`size-5 ${wished ? "fill-current" : ""}`} aria-hidden="true" />
-                </button>
+               <button
+                type="button"
+                onClick={() => toggle(product)}
+                aria-label={wished ? "Remove from wishlist" : "Add to wishlist"}
+                aria-pressed={wished}
+                className={`cursor-pointer grid w-16 place-items-center bg-sf-blush transition-opacity hover:opacity-90 ${
+                  wished ? "text-red-900" : "text-black"
+                }`}
+              >
+                <Heart className={`size-5 ${wished ? "fill-current" : ""}`} aria-hidden="true" />
+              </button>
               </div>
 
               <p className="mt-4 pb-6 text-sm text-sf-muted">

@@ -49,8 +49,13 @@ const HubGeneralSettingsPage = lazy(() => import("@/pages/hub/settings/general-s
 const StorefrontPage = lazy(() => import("@/pages/storefront-page"))
 const JewelryPage = lazy(() => import("@/pages/jewelry-page"))
 const ProductPage = lazy(() => import("@/pages/product-page"))
+const AccountProfilePage = lazy(() => import("@/pages/account/profile-page"))
+const AccountWishlistPage = lazy(() => import("@/pages/account/wishlist-page"))
 
 const CouponsPage = lazy(() => import("@/pages/hub/coupons/coupons-page"))
+const HubBusinessModePage = lazy(()=> import("@/pages/hub/business-mode/business-mode-page"))
+
+const TermsAndConditionsPage = lazy(() => import("@/pages/terms-and-conditions"))
 
 
 function FullScreenLoader() {
@@ -95,6 +100,13 @@ function HubPermissionRoute({ children }) {
   return fallback && fallback !== pathname
     ? <Navigate to={fallback} replace />
     : <Navigate to="/hub/forbidden" replace />
+}
+
+
+function CustomerProtectedRoute({ children }) {
+  const { isAuthenticated, isLoading } = useCustomerAuth()
+  if (isLoading) return <FullScreenLoader />
+  return isAuthenticated ? children : <Navigate to="/" replace />
 }
 
 
@@ -180,6 +192,9 @@ export default function App() {
         <Route path="advanced/metafields/new" element={<HubMetafieldEditorPage key="create" />} />
         <Route path="advanced/metafields/:id/edit" element={<HubMetafieldEditorPage />} />
 
+        <Route path="advanced/business-mode" element={<HubBusinessModePage />} />
+
+
         {/* Marketing */}
         <Route path="marketing/discounts" element={<HubDiscountsPage />} />
 
@@ -216,15 +231,44 @@ export default function App() {
         }
       />
 
+
       <Route
-        path="/checkout"
+        path="/account/profile"
+        element={
+          // <CustomerProtectedRoute>
+          <Suspense fallback={<FullScreenLoader />}>
+              <AccountProfilePage />
+            </Suspense>
+          // </CustomerProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/account/wishlist"
         element={
           <Suspense fallback={<FullScreenLoader />}>
-            <CheckoutPage />
+            <AccountWishlistPage />
           </Suspense>
         }
       />
 
+        <Route
+          path="/checkout"
+          element={
+            <Suspense fallback={<FullScreenLoader />}>
+              <CheckoutPage />
+            </Suspense>
+          }
+        />
+
+         <Route
+        path="/terms"
+        element={
+          <Suspense fallback={<FullScreenLoader />}>
+            <TermsAndConditionsPage />
+          </Suspense>
+        }
+      />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

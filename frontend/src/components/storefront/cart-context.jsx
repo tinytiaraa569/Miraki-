@@ -88,37 +88,44 @@ export function CartProvider({ children }) {
 
   // Sent to the server on every apply/re-validate call so it can check
   // coupon.conditions (category/collection/brand) 
-  const cartItemsPayload = useMemo(
-    () =>
-      items.map((i) => ({
-        categoryIds: i.categoryIds || [],
-        collectionIds: i.collectionIds || [],
-        brandId: i.brandId || undefined,
-      })),
-    [items],
-  )
+ const cartItemsPayload = useMemo(
+  () =>
+    items.map((i) => ({
+      productId: i.productId,
+      categoryIds: i.categoryIds || [],
+      collectionIds: i.collectionIds || [],
+      brandId: i.brandId || undefined,
+      quantity: i.quantity,
+      price: i.price,
+    })),
+  [items],
+)
 
 
-  const applyCoupon = useCallback(
-    async (code, substoreId) => {
-      setApplyingCoupon(true)
-      try {
-        const res = await api.post("/storefront/coupons/apply", {
-          code: code.trim().toUpperCase(),
-          cartTotal: subtotal,
-          items: cartItemsPayload,
-          // userId: currentUser?._id, 
-        })
-        setCoupon({ code: res.coupon.code, discountType: res.coupon.discountType, discountAmount: res.discountAmount })
-        return res
-      } catch (err) {
-        throw new Error(err?.message || "Couldn't apply that code")
-      } finally {
-        setApplyingCoupon(false)
-      }
-    },
-    [subtotal, cartItemsPayload],
-  )
+const applyCoupon = useCallback(
+  async (code, substoreId) => {
+    setApplyingCoupon(true)
+    try {
+      const res = await api.post("/storefront/coupons/apply", {
+        code: code.trim().toUpperCase(),
+        cartTotal: subtotal,
+        items: cartItemsPayload,
+      })
+      setCoupon({
+        code: res.coupon.code,
+        discountType: res.coupon.discountType,
+        discountAmount: res.discountAmount,
+        applicableInfo: res.applicableInfo,
+      })
+      return res
+    } catch (err) {
+      throw new Error(err?.message || "Couldn't apply that code")
+    } finally {
+      setApplyingCoupon(false)
+    }
+  },
+  [subtotal, cartItemsPayload],
+)
 
   const removeCoupon = useCallback(() => setCoupon(null), [])
 
@@ -130,29 +137,35 @@ export function CartProvider({ children }) {
     if (!code) return
 
     const timer = setTimeout(async () => {
-      try {
-        const res = await api.post("/storefront/coupons/apply", { code, cartTotal: subtotal, items: cartItemsPayload })
-        setCoupon({ code: res.coupon.code, discountType: res.coupon.discountType, discountAmount: res.discountAmount })
-      } catch {
-        setCoupon(null)
-      }
-    }, 400)
+  try {
+    const res = await api.post("/storefront/coupons/apply", { code, cartTotal: subtotal, items: cartItemsPayload })
+    setCoupon({
+      code: res.coupon.code,
+      discountType: res.coupon.discountType,
+      discountAmount: res.discountAmount,
+      applicableInfo: res.applicableInfo, // ← add this
+    })
+  } catch {
+    setCoupon(null)
+  }
+}, 400)
 
     return () => clearTimeout(timer)
   }, [subtotal, cartItemsPayload])
 
   const itemCount = useMemo(() => items.reduce((n, i) => n + i.quantity, 0), [items])
 
-  const cart = useMemo(
-    () => ({
-      items,
-      subtotal,
-      discount: coupon?.discountAmount ?? 0,
-      total: Math.max(0, subtotal - (coupon?.discountAmount ?? 0)),
-      coupon,
-    }),
-    [items, subtotal, coupon],
-  )
+const cart = useMemo(
+  () => ({
+    items,
+    subtotal,
+    discount: coupon?.discountAmount ?? 0,
+    total: Math.max(0, subtotal - (coupon?.discountAmount ?? 0)),
+    coupon,
+    applicableInfo: coupon?.applicableInfo ?? null,
+  }),
+  [items, subtotal, coupon],
+)
 
   const value = useMemo(
     () => ({

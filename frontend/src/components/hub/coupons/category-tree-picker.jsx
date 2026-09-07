@@ -16,6 +16,15 @@ import {
 import { cn } from "@/lib/utils"
 import { fetcher } from "@/lib/api"
 
+// Once a key has been fetched, re-opening the same node/tree serves the
+// cached page with no network call — mirrors useCouponEntityOptions.
+const NO_REVALIDATE = {
+  revalidateOnFocus: false,
+  revalidateOnReconnect: false,
+  revalidateIfStale: false,
+  revalidateOnMount: false,
+  shouldRetryOnError: false,
+}
 
 function PickerNode({ node, depth, parentPath, selectedIds, onToggle }) {
   const [expanded, setExpanded] = useState(false)
@@ -25,7 +34,7 @@ function PickerNode({ node, depth, parentPath, selectedIds, onToggle }) {
   const { data, isLoading } = useSWR(
     expanded && hasChildren ? `/seller/categories?parentId=${node._id}` : null,
     fetcher,
-    { revalidateOnFocus: false },
+    NO_REVALIDATE,
   )
   const children = data?.rows ?? []
   const checked = selectedIds.includes(String(node._id))
@@ -91,9 +100,11 @@ function PickerNode({ node, depth, parentPath, selectedIds, onToggle }) {
 }
 
 export function CategoryTreePicker({ open, onOpenChange, value = [], onChange, onLabels }) {
-  const { data, isLoading } = useSWR(open ? "/seller/categories?parentId=null" : null, fetcher, {
-    revalidateOnFocus: false,
-  })
+  const { data, isLoading } = useSWR(
+    open ? "/seller/categories?parentId=null" : null,
+    fetcher,
+    NO_REVALIDATE,
+  )
   const roots = data?.rows ?? []
   const selectedIds = Array.isArray(value) ? value.map(String) : []
 
@@ -147,15 +158,14 @@ export function CategoryTreePicker({ open, onOpenChange, value = [], onChange, o
   )
 }
 
-
-export function CategoryTreeField({ selectedIds, onChange, placeholder = "Select categories" }) {
+export function CategoryTreeField({ selectedIds, onChange, onLabels, placeholder = "Select categories" }) {
   const [open, setOpen] = useState(false)
-  const [labels, setLabels] = useState({}) 
+  const [labels, setLabels] = useState({})
 
   const { data: resolved } = useSWR(
     selectedIds.length ? `/seller/categories/options?ids=${selectedIds.join(",")}` : null,
     fetcher,
-    { revalidateOnFocus: false, shouldRetryOnError: false },
+    NO_REVALIDATE,
   )
 
   function labelFor(id) {
@@ -197,7 +207,10 @@ export function CategoryTreeField({ selectedIds, onChange, placeholder = "Select
         onOpenChange={setOpen}
         value={selectedIds}
         onChange={onChange}
-        onLabels={(next) => setLabels((l) => ({ ...l, ...next }))}
+        onLabels={(next) => {
+          setLabels((l) => ({ ...l, ...next }))
+          onLabels?.(next)
+        }}
       />
     </div>
   )
