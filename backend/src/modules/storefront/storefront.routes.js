@@ -1,6 +1,5 @@
 import { Router } from "express"
 import { getPublicHead } from "../generalsettings/generalSettings.service.js"
-import { Router } from "express";
 import {
   resolveStorefront,
   resolveSubstore,
@@ -11,22 +10,15 @@ import {
   getStorefrontProduct,
   getStorefrontVariantMedia,
   ensureStorefrontTenant,
-} from "./storefront.service.js"
   applyStorefrontCoupon,
-} from "./storefront.service.js";
+} from "./storefront.service.js"
+  
 import { applyCouponSchema } from "../coupons/coupon.validation.js";
 
 // PUBLIC, read-only storefront resolver — no auth, safe by construction:
 // it only ever returns whitelisted substore fields + a static canvas JSON.
 export const storefrontRoutes = Router();
 
-/**
- * Country detection priority: explicit ?country override → remembered
- * `sf_country` cookie → CDN geo headers. Reading the cookie is what lets the
- * shopper's chosen store flow to EVERY endpoint (detail, variant-media, feed)
- * without threading a query param onto each request — the browser sends the
- * cookie automatically, so option/value scoping matches the picked substore.
- */
 function detectCountry(req) {
   const q = String(req.query.country || "").toUpperCase();
   if (/^[A-Z]{2}$/.test(q)) return q;

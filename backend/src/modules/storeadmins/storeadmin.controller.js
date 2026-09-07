@@ -1,6 +1,6 @@
 import { ApiError } from "../../utils/apiError.js"
 import { asyncHandler } from "../../utils/asyncHandler.js"
-import { createStoreAdmin, getStoreAdmin, listStoreAdmins, updateStoreAdmin } from "./storeAdmin.service.js"
+import { createStoreAdmin, getStoreAdmin, listStoreAdmins, updateStoreAdmin } from "./storeadmin.service.js"
 import { listStoreAdminsQuerySchema } from "./storeadmin.validation.js"
 
 const ctx = (req) => ({ seller: req.seller, tenantDbName: req.tenantDbName, actor: req.user, req })

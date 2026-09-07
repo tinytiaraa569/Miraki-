@@ -37,7 +37,34 @@ export const app = express()
 app.set("trust proxy", 1)
 
 // Security headers
-app.use(helmet())
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        // index.html carries an inline theme bootstrap that MUST run before first
+        // paint, so it cannot move to an external file without reintroducing the
+        // flash-of-wrong-theme. Allow that one script by hash rather than with
+        // 'unsafe-inline' — serveStorefront injects General Settings headHtml into
+        // the page, and 'unsafe-inline' would let that content execute scripts.
+        // If the bootstrap ever changes, the browser prints the new hash.
+        scriptSrc: ["'self'", "'sha256-VEuIjxPzS7pvVUmEDtR7pCgPGq/DhYhnfD+f7hAFjts='"],
+        // Only correct once TLS terminates at the proxy. On a plain-HTTP origin it
+        // rewrites same-origin requests to https:// where nothing is listening, so
+        // gate it on the same flag that governs secure cookies.
+        upgradeInsecureRequests: env.COOKIE_SECURE ? [] : null,
+        // Helmet's default is ['self', 'data:'], which is too narrow here:
+        //   blob:   imgUrl() passes blob: URLs through for local file previews.
+        //   https:  product records may store absolute CDN URLs, which imgUrl()
+        //           returns verbatim rather than prefixing IMGDB_URL.
+        // Narrow `https:` to the specific image hosts in use once they're known —
+        // images can't execute script, but a broad scheme source still permits
+        // any HTTPS host to be pinged from a page view.
+        imgSrc: ["'self'", "data:", "blob:", "https:"],
+      },
+    },
+  }),
+)
 
 // Exact-origin whitelist, credentials for httpOnly cookies. No wildcards.
 app.use(
